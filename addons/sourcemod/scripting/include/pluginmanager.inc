@@ -3,21 +3,18 @@
 
 #include <dhooks>
 
-#define PLUGINMAN_MAX_EVENT_NAME_LENGTH		32
-#define PLUGINMAN_MAX_DETOUR_NAME_LENGTH	64
-
 typedef PluginToggledHook = function void(bool enabled);
 
 enum struct EventData
 {
-	char name[PLUGINMAN_MAX_EVENT_NAME_LENGTH];
+	char name[32];
 	EventHook callback;
 	EventHookMode mode;
 }
 
 enum struct DetourData
 {
-	char name[PLUGINMAN_MAX_DETOUR_NAME_LENGTH];
+	char name[64];
 	DynamicDetour detour;
 	DHookCallback callbackPre;
 	DHookCallback callbackPost;
@@ -25,7 +22,7 @@ enum struct DetourData
 
 enum struct DHookData
 {
-	char name[PLUGINMAN_MAX_DETOUR_NAME_LENGTH];
+	char name[64];
 	DynamicHook hook;
 }
 
