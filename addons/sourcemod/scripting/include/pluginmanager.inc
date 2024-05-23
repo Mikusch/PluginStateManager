@@ -8,14 +8,14 @@
 
 typedef PluginToggledHook = function void(bool enabled);
 
-enum struct PluginManagerEventData
+enum struct EventData
 {
 	char name[PLUGINMAN_MAX_EVENT_NAME_LENGTH];
 	EventHook callback;
 	EventHookMode mode;
 }
 
-enum struct PluginManagerDetourData
+enum struct DetourData
 {
 	char name[PLUGINMAN_MAX_DETOUR_NAME_LENGTH];
 	DynamicDetour detour;
@@ -23,7 +23,7 @@ enum struct PluginManagerDetourData
 	DHookCallback callbackPost;
 }
 
-enum struct PluginManagerDynamicHookData
+enum struct DHookData
 {
 	char name[PLUGINMAN_MAX_DETOUR_NAME_LENGTH];
 	DynamicHook hook;
@@ -41,9 +41,9 @@ static ConVar s_enableConvar;
 static GameData s_gamedata;
 static PrivateForward s_toggledFwd;
 
-static ArrayList s_eventData; // ArrayList<PluginManagerEventData>
-static ArrayList s_detourData; // ArrayList <PluginManagerDetourData>
-static ArrayList s_dynamicHookData; // ArrayList<PluginManagerDynamicHookData>
+static ArrayList s_eventData; // ArrayList<EventData>
+static ArrayList s_detourData; // ArrayList <DetourData>
+static ArrayList s_dynamicHookData; // ArrayList<DHookData>
 static ArrayList s_dynamicHookIds; // ArrayList<DHookIdData>
 
 methodmap PluginManager
@@ -73,9 +73,9 @@ methodmap PluginManager
 			s_gamedata = view_as<GameData>(CloneHandle(gamedata));
 		
 		s_toggledFwd = new PrivateForward(ET_Ignore, Param_Cell);
-		s_eventData = new ArrayList(sizeof(PluginManagerEventData));
-		s_detourData = new ArrayList(sizeof(PluginManagerDetourData));
-		s_dynamicHookData = new ArrayList(sizeof(PluginManagerDynamicHookData));
+		s_eventData = new ArrayList(sizeof(EventData));
+		s_detourData = new ArrayList(sizeof(DetourData));
+		s_dynamicHookData = new ArrayList(sizeof(DHookData));
 		s_dynamicHookIds = new ArrayList(sizeof(DHookIdData));
 		
 		s_isInitialized = true;
@@ -117,7 +117,7 @@ methodmap PluginManager
 		// Events
 		for (int i = 0; i < s_eventData.Length; i++)
 		{
-			PluginManagerEventData data;
+			EventData data;
 			if (s_eventData.GetArray(i, data))
 			{
 				ToggleEvent(data, enable);
@@ -127,7 +127,7 @@ methodmap PluginManager
 		// Detours
 		for (int i = 0; i < s_detourData.Length; i++)
 		{
-			PluginManagerDetourData data;
+			DetourData data;
 			if (s_detourData.GetArray(i, data))
 			{
 				ToggleDetour(data, enable);
@@ -139,7 +139,7 @@ methodmap PluginManager
 		{
 			for (int i = s_dynamicHookIds.Length - 1; i >= 0; i--)
 			{
-				int hookid = s_dynamicHookIds.Get(i);
+				int hookid = s_dynamicHookIds.Get(i, DHookIdData::hookid);
 				DynamicHook.RemoveHook(hookid);
 			}
 		}
@@ -184,7 +184,7 @@ methodmap PluginManager
 		{
 			event.Cancel();
 			
-			PluginManagerEventData data;
+			EventData data;
 			strcopy(data.name, sizeof(data.name), name);
 			data.callback = callback;
 			data.mode = mode;
@@ -213,7 +213,7 @@ methodmap PluginManager
 		
 		for (int i = 0; i < s_eventData.Length; i++)
 		{
-			PluginManagerEventData data;
+			EventData data;
 			if (s_eventData.GetArray(i, data) && StrEqual(name, data.name) && callback == data.callback && mode == data.mode)
 			{
 				if (PluginManager.IsEnabled())
@@ -248,7 +248,7 @@ methodmap PluginManager
 		DynamicDetour detour = DynamicDetour.FromConf(s_gamedata, name);
 		if (detour)
 		{
-			PluginManagerDetourData data;
+			DetourData data;
 			strcopy(data.name, sizeof(data.name), name);
 			data.detour = detour;
 			data.callbackPre = callbackPre;
@@ -278,7 +278,7 @@ methodmap PluginManager
 		
 		for (int i = 0; i < s_detourData.Length; i++)
 		{
-			PluginManagerDetourData data;
+			DetourData data;
 			if (s_detourData.GetArray(i, data) && StrEqual(name, data.name) && callbackPre == data.callbackPre && callbackPost == data.callbackPost)
 			{
 				if (PluginManager.IsEnabled())
@@ -311,7 +311,7 @@ methodmap PluginManager
 		DynamicHook hook = DynamicHook.FromConf(s_gamedata, name);
 		if (hook)
 		{
-			PluginManagerDynamicHookData data;
+			DHookData data;
 			strcopy(data.name, sizeof(data.name), name);
 			data.hook = hook;
 			
@@ -337,7 +337,7 @@ methodmap PluginManager
 		
 		for (int i = 0; i < s_dynamicHookData.Length; i++)
 		{
-			PluginManagerDynamicHookData data;
+			DHookData data;
 			if (s_dynamicHookData.GetArray(i, data) && StrEqual(name, data.name))
 			{
 				// Unhook any entities that belong to this hook
@@ -369,14 +369,14 @@ methodmap PluginManager
 	{
 		EnsureInitializedState();
 		
-		int index = s_dynamicHookData.FindString(name, PluginManagerDynamicHookData::name);
+		int index = s_dynamicHookData.FindString(name, DHookData::name);
 		if (index == -1)
 		{
 			LogError("Failed to find dynamic hook for '%s'", name);
 			return false;
 		}
 		
-		DynamicHook hook = s_dynamicHookData.Get(index, PluginManagerDynamicHookData::hook);
+		DynamicHook hook = s_dynamicHookData.Get(index, DHookData::hook);
 		return PluginManager.DynamicHookEntity(entity, hook, mode, callback);
 	}
 	
@@ -464,12 +464,12 @@ static void OnEnableConVarChanged(ConVar convar, const char[] oldValue, const ch
 
 static void OnDynamicHookRemoved(int hookid)
 {
-	int index = s_dynamicHookIds.FindValue(hookid);
+	int index = s_dynamicHookIds.FindValue(hookid, DHookIdData::hookid);
 	if (index != -1)
 		s_dynamicHookIds.Erase(index);
 }
 
-static void ToggleDetour(PluginManagerDetourData data, bool enable)
+static void ToggleDetour(DetourData data, bool enable)
 {
 	if (data.callbackPre != INVALID_FUNCTION)
 	{
@@ -488,7 +488,7 @@ static void ToggleDetour(PluginManagerDetourData data, bool enable)
 	}
 }
 
-static void ToggleEvent(PluginManagerEventData data, bool enable)
+static void ToggleEvent(EventData data, bool enable)
 {
 	if (enable)
 		HookEvent(data.name, data.callback, data.mode);
