@@ -7,8 +7,8 @@ static DynamicHook g_hookSetModel;
 
 public void OnPluginStart()
 {
-	GameData gamedata = new GameData("pluginmanager");
-	ConVar convar = CreateConVar("sm_pluginmanager_enabled", "1", "Enable the plugin?");
+	GameData gamedata = new GameData("pluginmanager_test");
+	ConVar convar = CreateConVar("sm_pluginmanager_test_enabled", "1", "Enable the plugin?");
 	
 	// Initialize the plugin manager system.
 	// The passed convar handle will be used to determine whether the plugin should be enabled or disabled.

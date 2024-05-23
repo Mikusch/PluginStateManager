@@ -14,41 +14,36 @@ void OnGameEvent_player_spawn(Event event, const char[] name, bool dontBroadcast
 }
 ```
 
-As plugin developers, we have to make sure that our disabled plugins don't actually do anything, and the easiest way to accomplish that is to check for the enabled state in every callback we create. This not only ends up being annoying and error-prone, but also wastes CPU cycles, as the hooks still get called by SourceMod.
+Writing "is enabled" checks into every callback can be a pain, and it's easy to forget to add them.
 
-A while ago I wrote a pretty robust system for enabling and disabling a plugin, making sure that no trace is left behind when a plugin is disabled. I ended up copy-pasting it into every plugin and grew pretty tired of that, so I opted to  make it an include.
+This include aims to make it easier to enable and disable plugins, and to save on resources.
 
 ```sourcepawn
 #include <pluginmanager>
 
 public void OnPluginStart()
 {
-	GameData gamedata = new GameData("cbasenpc");
-	PluginManager.Init(CreateConVar("sm_myplugin_enabled", "1"), gamedata);
-	delete gamedata;
+	// Initialize the plugin manager
+	PluginManager.Init(CreateConVar("sm_myplugin_enabled", "1", "Enable the plugin?"));
 	
-	PluginManager.AddPluginToggledHook(OnPluginToggled);
-	
+	// Register your callbacks
 	PluginManager.AddEventHook("player_spawn", OnGameEvent_player_spawn);
-}
-
-void OnPluginToggled(bool enable)
-{
-	LogMessage("Plugin changed state to [%s]", enable ? "enabled" : "disabled");
-}
-
-static void OnGameEvent_player_spawn(Event event, const char[] name, bool dontBroadcast)
-{
-	int client = GetClientOfUserId(event.GetInt("userid"));
-	LogMessage("Player %N spawned", client);
 }
 
 public void OnConfigsExecuted()
 {
+	// Automatically enable or disable the plugin based on the server configuration
 	PluginManager.TogglePluginIfNecessary();
+}
+
+static void OnGameEvent_player_spawn(Event event, const char[] name, bool dontBroadcast)
+{
+	LogMessage("Player spawned");
 }
 ```
 
-Since this is an include, all the resources allocated will belong to your plugin.
-
 When `sm_myplugin_enabled` is set to `0`, everything you added will be completely unhooked, meaning you don't have to check if the plugin is enabled in each callback.
+
+This is **completely standalone** - no need to install any plugins or extensions. Just include the file and you're good to go.
+
+For more examples, check out the [example plugin](https://github.com/Mikusch/pluginmanager/blob/master/addons/sourcemod/scripting/pluginmanager_test.sp).
