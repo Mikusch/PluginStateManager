@@ -1,28 +1,39 @@
+#pragma semicolon 1
+#pragma newdecls required
+
 #include <pluginmanager>
 
 public void OnPluginStart()
 {
-	GameData gamedata = new GameData("cbasenpc");
-	PluginManager.Init(CreateConVar("sm_myplugin_enabled", "1"), gamedata);
+	GameData gamedata = new GameData("pluginmanager");
+	PluginManager.Init(CreateConVar("sm_pluginmanager_enabled", "1"), gamedata);
 	delete gamedata;
 	
 	PluginManager.AddPluginToggledHook(OnPluginToggled);
 	
+	// Add events, detours, etc. to be hooked when the plugin enables
 	PluginManager.AddEventHook("player_spawn", OnGameEvent_player_spawn);
+	PluginManager.AddDynamicDetour("CTFPlayer::GetLoadoutItem", OnGetLoadoutItem);
 }
 
-void OnPluginToggled(bool enable)
+public void OnConfigsExecuted()
+{
+	// This will enable the plugin if the specified convar's value is true
+	PluginManager.TogglePluginIfNecessary();
+}
+
+static void OnPluginToggled(bool enable)
 {
 	LogMessage("Plugin changed state to [%s]", enable ? "enabled" : "disabled");
 }
 
 static void OnGameEvent_player_spawn(Event event, const char[] name, bool dontBroadcast)
 {
-	int client = GetClientOfUserId(event.GetInt("userid"));
-	LogMessage("Player %N spawned", client);
+	LogMessage("Player spawned");
 }
 
-public void OnConfigsExecuted()
+static MRESReturn OnGetLoadoutItem(DHookParam params)
 {
-	PluginManager.TogglePluginIfNecessary();
+	LogMessage("Getting player's loadout item");
+	return MRES_Ignored;
 }

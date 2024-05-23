@@ -1,8 +1,10 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGINMAN_MAX_EVENT_NAME_LENGTH	32
-#define PLUGINMAN_MAX_COMMAND_LENGTH	512
+#include <dhooks>
+
+#define PLUGINMAN_MAX_EVENT_NAME_LENGTH		32
+#define PLUGINMAN_MAX_DETOUR_NAME_LENGTH	64
 
 typedef PluginToggledHook = function void(bool enabled);
 
@@ -13,13 +15,22 @@ enum struct PluginManagerEventData
 	EventHookMode mode;
 }
 
-static bool s_initialized;
+enum struct PluginManagerDetourData
+{
+	char name[PLUGINMAN_MAX_DETOUR_NAME_LENGTH];
+	DynamicDetour detour;
+	DHookCallback callbackPre;
+	DHookCallback callbackPost;
+}
+
+static bool s_isInitialized;
 static bool s_isEnabled;
 static ConVar s_enableConvar;
 static GameData s_gamedata;
 static PrivateForward s_toggledFwd;
 
 static ArrayList s_eventData; // ArrayList<PluginManagerEventData>
+static ArrayList s_detourData; // ArrayList <PluginManagerDetourData>
 
 methodmap PluginManager
 {
@@ -31,19 +42,28 @@ methodmap PluginManager
 	 */
 	public static void Init(ConVar convar, GameData gamedata = null)
 	{
+		if (s_isInitialized)
+		{
+			LogError("PluginManager can only be initialized once per plugin!");
+			return;
+		}
+		
 		s_enableConvar = convar;
 		s_enableConvar.AddChangeHook(OnEnableConVarChanged);
 		
-		s_gamedata = view_as<GameData>(CloneHandle(gamedata));
+		if (gamedata)
+			s_gamedata = view_as<GameData>(CloneHandle(gamedata));
+		
 		s_toggledFwd = new PrivateForward(ET_Ignore, Param_Cell);
 		s_eventData = new ArrayList(sizeof(PluginManagerEventData));
+		s_detourData = new ArrayList(sizeof(PluginManagerDetourData));
 		
-		s_initialized = true;
+		s_isInitialized = true;
 	}
 	
 	/**
-	 * Toggles the enabled state of the plugin if it isn't in that state already.
-	 * Plugins should call this in OnConfigsExecuted() to determine whether to enable the plugin on first load.
+	 * Convenience function that toggles the enabled state of the plugin if it isn't in that state already.
+	 * Plugins should call this function in a OnConfigsExecuted forward to determine whether to enable themselves on first load.
 	 */
 	public static void TogglePluginIfNecessary()
 	{
@@ -57,7 +77,7 @@ methodmap PluginManager
 	
 	/**
 	 * Sets the enabled state of the plugin.
-	 * Plugins generally want to use TogglePluginIfNecessary() to respect the convar.
+	 * Plugins generally want to use PluginManager.TogglePluginIfNecessary to respect the convar.
 	 *
 	 * @param enable		If true, the plugin will be enabled. If false, the plugin will be disabled.
 	 * @error				If the plugin was already in that state.
@@ -68,7 +88,7 @@ methodmap PluginManager
 		
 		if (PluginManager.IsEnabled() == enable)
 		{
-			LogError("The plugin is already in that state!");
+			LogError("Attempted to set plugin into state it already is in!");
 			return;
 		}
 		
@@ -81,13 +101,32 @@ methodmap PluginManager
 			if (s_eventData.GetArray(i, data))
 			{
 				if (enable)
-				{
 					HookEvent(data.name, data.callback, data.mode);
-					PrintToServer("Hooked!");
-				}
 				else
-				{
 					UnhookEvent(data.name, data.callback, data.mode);
+			}
+		}
+		
+		// Detours
+		for (int i = 0; i < s_detourData.Length; i++)
+		{
+			PluginManagerDetourData data;
+			if (s_detourData.GetArray(i, data))
+			{
+				if (data.callbackPre != INVALID_FUNCTION)
+				{
+					if (enable)
+						data.detour.Enable(Hook_Pre, data.callbackPre);
+					else
+						data.detour.Disable(Hook_Pre, data.callbackPre);
+				}
+				
+				if (data.callbackPost != INVALID_FUNCTION)
+				{
+					if (enable)
+						data.detour.Enable(Hook_Post, data.callbackPost);
+					else
+						data.detour.Disable(Hook_Post, data.callbackPost);
 				}
 			}
 		}
@@ -110,6 +149,15 @@ methodmap PluginManager
 		return s_toggledFwd.AddFunction(null, hook);
 	}
 	
+	/**
+	 * Registers an event to be hooked when the plugin gets enabled.
+	 *
+	 * @param name			Name of event.
+	 * @param callback		An EventHook function pointer.
+	 * @param mode			Optional EventHookMode determining the type of hook.
+	 * @return				True on success, false otherwise.
+	 * @error				Invalid event name.
+	 */
 	public static bool AddEventHook(const char[] name, EventHook callback, EventHookMode mode = EventHookMode_Post)
 	{
 		EnsureInitializedState();
@@ -129,11 +177,19 @@ methodmap PluginManager
 		}
 		else
 		{
-			LogError("Event %s doesn't exist!", name);
+			LogError("Failed to find event '%s'", name);
 			return false;
 		}
 	}
 	
+	/**
+	 * Unregisters an event to be hooked when the plugin gets enabled.
+	 *
+	 * @param name          Name of event.
+	 * @param callback      An EventHook function pointer.
+	 * @param mode          Optional EventHookMode determining the type of hook.
+	 * @return				True on success, false otherwise.
+	 */
 	public static bool RemoveEventHook(const char[] name, EventHook callback, EventHookMode mode = EventHookMode_Post)
 	{
 		EnsureInitializedState();
@@ -148,12 +204,71 @@ methodmap PluginManager
 			}
 		}
 		
+		LogError("Failed to find event '%s' in the registry", name);
+		return false;
+	}
+	
+	/**
+	 * Registers a dynamic detour to get enabled when the plugin gets enabled.
+	 * This internally uses DynamicDetour.FromConf, so the gamedata file must contain a "Functions" section.
+	 *
+	 * @param name          	Name of the function in a "Functions" section to load.
+	 * @param callbackPre		Optional pre callback function.
+	 * @param callbackPost		Optional post callback function.
+	 * @return					True on success, false otherwise.
+	 */
+	public static bool AddDynamicDetour(const char[] name, DHookCallback callbackPre = INVALID_FUNCTION, DHookCallback callbackPost = INVALID_FUNCTION)
+	{
+		EnsureInitializedState(true);
+		
+		DynamicDetour hDetour = DynamicDetour.FromConf(s_gamedata, name);
+		if (hDetour)
+		{
+			PluginManagerDetourData data;
+			strcopy(data.name, sizeof(data.name), name);
+			data.detour = hDetour;
+			data.callbackPre = callbackPre;
+			data.callbackPost = callbackPost;
+			
+			s_detourData.PushArray(data);
+			return true;
+		}
+		else
+		{
+			LogError("Failed to create detour setup handle '%s'", name);
+			return false;
+		}
+	}
+	
+	/**
+	 * Unregisters a dynamic detour to get enabled when the plugin gets enabled.
+	 *
+	 * @param name          	Name of the function in a "Functions" section to load.
+	 * @param callbackPre		Optional pre callback function.
+	 * @param callbackPost		Optional post callback function.
+	 * @return					True on success, false otherwise.
+	 */
+	public static bool RemoveDynamicDetour(const char[] name, DHookCallback callbackPre = INVALID_FUNCTION, DHookCallback callbackPost = INVALID_FUNCTION)
+	{
+		EnsureInitializedState();
+		
+		for (int i = 0; i < s_detourData.Length; i++)
+		{
+			PluginManagerDetourData data;
+			if (s_detourData.GetArray(i, data) && StrEqual(name, data.name) && callbackPre == data.callbackPre && callbackPost == data.callbackPost)
+			{
+				s_detourData.Erase(i);
+				return true;
+			}
+		}
+		
+		LogError("Failed to find detour '%s' in the registry", name);
 		return false;
 	}
 	
 	public static bool IsInitialized()
 	{
-		return s_initialized;
+		return s_isInitialized;
 	}
 	
 	public static bool IsEnabled()
@@ -164,11 +279,16 @@ methodmap PluginManager
 
 //// PRIVATE
 
-static void EnsureInitializedState()
+static void EnsureInitializedState(bool requireGameData = false)
 {
 	if (!PluginManager.IsInitialized())
 	{
-		SetFailState("PluginManager is not initialized! Call PluginManager.Init() before using any of its functions!");
+		SetFailState("PluginManager is not initialized! Call 'PluginManager.Init' to use this function!");
+	}
+	
+	if (requireGameData && !s_gamedata)
+	{
+		SetFailState("GameData handle is not initialized! Pass a valid GameData handle to 'PluginManager.Init' to use this function!");
 	}
 }
 
