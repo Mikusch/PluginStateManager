@@ -29,6 +29,12 @@ enum struct PluginManagerDynamicHookData
 	DynamicHook hook;
 }
 
+enum struct DHookIdData
+{
+	int hookid;
+	DynamicHook hook;
+}
+
 static bool s_isInitialized;
 static bool s_isEnabled;
 static ConVar s_enableConvar;
@@ -38,7 +44,7 @@ static PrivateForward s_toggledFwd;
 static ArrayList s_eventData; // ArrayList<PluginManagerEventData>
 static ArrayList s_detourData; // ArrayList <PluginManagerDetourData>
 static ArrayList s_dynamicHookData; // ArrayList<PluginManagerDynamicHookData>
-static ArrayList s_dynamicHookIds;
+static ArrayList s_dynamicHookIds; // ArrayList<DHookIdData>
 
 methodmap PluginManager
 {
@@ -70,7 +76,7 @@ methodmap PluginManager
 		s_eventData = new ArrayList(sizeof(PluginManagerEventData));
 		s_detourData = new ArrayList(sizeof(PluginManagerDetourData));
 		s_dynamicHookData = new ArrayList(sizeof(PluginManagerDynamicHookData));
-		s_dynamicHookIds = new ArrayList();
+		s_dynamicHookIds = new ArrayList(sizeof(DHookIdData));
 		
 		s_isInitialized = true;
 	}
@@ -134,7 +140,6 @@ methodmap PluginManager
 			for (int i = s_dynamicHookIds.Length - 1; i >= 0; i--)
 			{
 				int hookid = s_dynamicHookIds.Get(i);
-				PrintToServer("%d", hookid);
 				DynamicHook.RemoveHook(hookid);
 			}
 		}
@@ -321,6 +326,37 @@ methodmap PluginManager
 	}
 	
 	/**
+	 * Unregisters a dynamic hook.
+	 *
+	 * @param name          	The name of the registered dynamic hook.
+	 * @return					True on success, false otherwise.
+	 */
+	public static bool RemoveDynamicHook(const char[] name)
+	{
+		EnsureInitializedState();
+		
+		for (int i = 0; i < s_dynamicHookData.Length; i++)
+		{
+			PluginManagerDynamicHookData data;
+			if (s_dynamicHookData.GetArray(i, data) && StrEqual(name, data.name))
+			{
+				// Unhook any entities that belong to this hook
+				for (int j = s_dynamicHookIds.Length - 1; j >= 0; j--)
+				{
+					if (s_dynamicHookIds.Get(j, DHookIdData::hook) == data.hook)
+						DynamicHook.RemoveHook(s_dynamicHookIds.Get(j, DHookIdData::hookid));
+				}
+				
+				s_dynamicHookData.Erase(i);
+				return true;
+			}
+		}
+		
+		LogError("Failed to find dynamic hook '%s' in the registry", name);
+		return false;
+	}
+	
+	/**
 	 * Finds a dynamic hook by name and hooks the provided entity.
 	 *
 	 * @param entity		Entity index to hook on.
@@ -359,7 +395,13 @@ methodmap PluginManager
 		
 		int hookid = hook.HookEntity(Hook_Pre, entity, callback, OnDynamicHookRemoved);
 		if (hookid != INVALID_HOOK_ID)
-			s_dynamicHookIds.Push(hookid);
+		{
+			DHookIdData data;
+			data.hookid = hookid;
+			data.hook = hook;
+			
+			s_dynamicHookIds.PushArray(data);
+		}
 		
 		return hookid;
 	}
@@ -378,7 +420,13 @@ methodmap PluginManager
 		
 		int hookid = hook.HookGamerules(mode, callback, OnDynamicHookRemoved);
 		if (hookid != INVALID_HOOK_ID)
-			s_dynamicHookIds.Push(hookid);
+		{
+			DHookIdData data;
+			data.hookid = hookid;
+			data.hook = hook;
+			
+			s_dynamicHookIds.PushArray(data);
+		}
 		
 		return hookid;
 	}
