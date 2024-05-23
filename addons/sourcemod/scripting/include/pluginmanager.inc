@@ -42,6 +42,10 @@ static ArrayList s_dynamicHookIds;
 
 methodmap PluginManager
 {
+	//=============================================================================
+	// Core Features
+	//=============================================================================
+	
 	/**
 	 * Initializes the plugin manager.
 	 *
@@ -153,6 +157,10 @@ methodmap PluginManager
 		return s_toggledFwd.AddFunction(null, hook);
 	}
 	
+	//=============================================================================
+	// Events
+	//=============================================================================
+	
 	/**
 	 * Registers an event to be hooked when the plugin gets enabled.
 	 *
@@ -215,6 +223,10 @@ methodmap PluginManager
 		return false;
 	}
 	
+	//=============================================================================
+	// Detours
+	//=============================================================================
+	
 	/**
 	 * Registers a dynamic detour.
 	 * This internally uses DynamicDetour.FromConf, so the name must be present in the "Functions" section of the gamedata file.
@@ -275,6 +287,10 @@ methodmap PluginManager
 		LogError("Failed to find detour '%s' in the registry", name);
 		return false;
 	}
+	
+	//=============================================================================
+	// Dynamic Hooks
+	//=============================================================================
 	
 	/**
 	 * Registers a dynamic hook.
@@ -342,6 +358,25 @@ methodmap PluginManager
 		EnsureInitializedState();
 		
 		int hookid = hook.HookEntity(Hook_Pre, entity, callback, OnDynamicHookRemoved);
+		if (hookid != INVALID_HOOK_ID)
+			s_dynamicHookIds.Push(hookid);
+		
+		return hookid;
+	}
+	
+	/**
+	 * Hooks the gamerules object.
+	 *
+	 * @param hook			The DynamicHook handle.
+	 * @param mode			The desired hook mode - pre or post. 
+	 * @param callback		Callback function.
+	 * @return				A hookid on success, INVALID_HOOK_ID otherwise.
+	 */
+	public static int DynamicHookGameRules(DynamicHook hook, HookMode mode, DHookCallback callback)
+	{
+		EnsureInitializedState();
+		
+		int hookid = hook.HookGamerules(mode, callback, OnDynamicHookRemoved);
 		if (hookid != INVALID_HOOK_ID)
 			s_dynamicHookIds.Push(hookid);
 		

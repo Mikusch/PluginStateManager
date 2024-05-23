@@ -35,10 +35,10 @@ public void OnPluginStart()
 public void OnClientPutInServer(int client)
 {
 	// You can use the dynamic hook handle here
-	PluginManager.DynamicHookEntity(client, g_hookSetModel, Hook_Pre, OnSetModelPre);
+	PluginManager.DynamicHookEntity(client, g_hookSetModel, Hook_Pre, OnPlayerSetModelPre);
 	
 	// ...or access it by name, in case you don't want to store the hook handles yourself
-	PluginManager.DynamicHookEntityByName(client, "CBaseEntity::SetModel", Hook_Pre, OnSetModelPre);
+	PluginManager.DynamicHookEntityByName(client, "CBaseEntity::SetModel", Hook_Pre, OnPlayerSetModelPre);
 }
 
 public void OnConfigsExecuted()
@@ -67,7 +67,12 @@ static MRESReturn OnGetLoadoutItemPost(DHookParam params)
 	return MRES_Ignored;
 }
 
-static MRESReturn OnSetModelPre(int entity, DHookParam params)
+static MRESReturn OnPlayerSetModelPre(int entity, DHookParam params)
 {
+	char model[PLATFORM_MAX_PATH];
+	params.GetString(1, model, sizeof(model));
+	
+	LogMessage("Player changed model: %s", model);
+	
 	return MRES_Ignored;
 }
