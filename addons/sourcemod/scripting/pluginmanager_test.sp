@@ -22,11 +22,11 @@ public void OnPluginStart()
 	
 	// Add events, detours, etc. to be hooked when the plugin enables.
 	PM_AddEventHook("player_spawn", OnGameEvent_player_spawn);
-	PM_AddDynamicDetour("CTFPlayer::GetLoadoutItem", OnGetLoadoutItemPre, OnGetLoadoutItemPost);
+	PM_AddDynamicDetourFromConf("CTFPlayer::GetLoadoutItem", OnGetLoadoutItemPre, OnGetLoadoutItemPost);
 	
 	// Dynamic hooks return the DynamicHook handle.
 	// You can use this handle directly in DynamicHookEntity, or if you don't want to store it, look up the hook by name (see: OnClientPutInServer).
-	g_hookSetModel = PM_AddDynamicHook("CBaseEntity::SetModel");
+	g_hookSetModel = PM_AddDynamicHookFromConf("CBaseEntity::SetModel");
 	
 	PM_AddEnforcedConVar("tf_forced_holiday", "2");
 }
@@ -45,10 +45,10 @@ public void OnPluginEnd()
 public void OnClientPutInServer(int client)
 {
 	// You can use the dynamic hook handle here.
-	PM_DynamicHookEntity(client, g_hookSetModel, Hook_Pre, OnPlayerSetModelPre);
+	PM_DynamicHookEntity(g_hookSetModel, Hook_Pre, client, OnPlayerSetModelPre);
 	
 	// ...or access it by name, in case you don't want to store the hook handles yourself.
-	PM_DynamicHookEntityByName(client, "CBaseEntity::SetModel", Hook_Pre, OnPlayerSetModelPre);
+	PM_DynamicHookEntityFromConf("CBaseEntity::SetModel", Hook_Pre, client, OnPlayerSetModelPre);
 	
 	// Keep in mind that we just hooked the same entity twice, thus the hook will also fire twice.
 }

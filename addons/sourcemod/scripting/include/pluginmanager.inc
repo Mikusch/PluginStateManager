@@ -211,10 +211,9 @@ stock bool PM_AddPluginStateChangedHook(PluginStateChangedCallback func)
  * @param name			Name of event.
  * @param callback		An EventHook function pointer.
  * @param mode			Optional EventHookMode determining the type of hook.
- * @return				True on success, false otherwise.
  * @error				Invalid event name or plugin manager not initialized.
  */
-stock bool PM_AddEventHook(const char[] name, EventHook callback, EventHookMode mode = EventHookMode_Post)
+stock void PM_AddEventHook(const char[] name, EventHook callback, EventHookMode mode = EventHookMode_Post)
 {
 	ThrowIfNotInitialized();
 	
@@ -229,12 +228,10 @@ stock bool PM_AddEventHook(const char[] name, EventHook callback, EventHookMode 
 		data.mode = mode;
 		
 		s_events.PushArray(data);
-		return true;
 	}
 	else
 	{
 		ThrowError("Failed to find event '%s'", name);
-		return false;
 	}
 }
 
@@ -268,42 +265,56 @@ stock void PM_RemoveEventHook(const char[] name, EventHook callback, EventHookMo
 //=============================================================================
 
 /**
- * Registers a dynamic detour.
- * This internally uses DynamicDetour.FromConf, so the name must be present in the "Functions" section of the gamedata file.
+ * Registers a dynamic detour by its name in the "Functions" section of the gamedata file.
  *
- * @param name          	Name of the function in a "Functions" section to load.
+ * @param name				Name of the function in a "Functions" section to load.
  * @param callbackPre		Optional pre callback function.
  * @param callbackPost		Optional post callback function.
- * @return					True on success, false otherwise.
  * @error					Invalid gamedata, plugin manager not initialized or GameData handle not initialized.
  */
-stock bool PM_AddDynamicDetour(const char[] name, DHookCallback callbackPre = INVALID_FUNCTION, DHookCallback callbackPost = INVALID_FUNCTION)
+stock DynamicDetour PM_AddDynamicDetourFromConf(const char[] name, DHookCallback callbackPre = INVALID_FUNCTION, DHookCallback callbackPost = INVALID_FUNCTION)
 {
 	ThrowIfNotInitialized(true);
 	
 	DynamicDetour detour = DynamicDetour.FromConf(s_gamedata, name);
 	if (detour)
 	{
-		DetourData data;
-		strcopy(data.name, sizeof(data.name), name);
-		data.detour = detour;
-		data.callbackPre = callbackPre;
-		data.callbackPost = callbackPost;
-		
-		s_detours.PushArray(data);
-		return true;
+		PM_AddDynamicDetour(name, detour, callbackPre, callbackPost);
+		return detour;
 	}
 	else
 	{
 		ThrowError("Failed to create detour setup handle '%s'", name);
-		return false;
+		return null;
 	}
+}
+
+/**
+ * Registers a dynamic detour.
+ *
+ * @param name				Name to register the dynamic detour as.
+ * @param detour			The DynamicDetour object.
+ * @param callbackPre		Optional pre callback function.
+ * @param callbackPost		Optional post callback function.
+ * @error					Plugin manager not initialized.
+ */
+stock void PM_AddDynamicDetour(const char[] name, DynamicDetour detour, DHookCallback callbackPre = INVALID_FUNCTION, DHookCallback callbackPost = INVALID_FUNCTION)
+{
+	ThrowIfNotInitialized(true);
+	
+	DetourData data;
+	strcopy(data.name, sizeof(data.name), name);
+	data.detour = detour;
+	data.callbackPre = callbackPre;
+	data.callbackPost = callbackPost;
+	
+	s_detours.PushArray(data);
 }
 
 /**
  * Unregisters a dynamic detour.
  *
- * @param name          	Name of the function in a "Functions" section to load.
+ * @param name				The name of the registered dynamic detour.
  * @param callbackPre		Optional pre callback function.
  * @param callbackPost		Optional post callback function.
  * @error					Plugin manager not initialized.
@@ -330,25 +341,20 @@ stock void PM_RemoveDynamicDetour(const char[] name, DHookCallback callbackPre =
 //=============================================================================
 
 /**
- * Registers a dynamic hook.
- * This internally uses DynamicHook.FromConf, so the name must be present in the "Functions" section of the gamedata file.
+ * Registers a dynamic hook by its name in the "Functions" section of the gamedata file.
  *
  * @param name		Name of the function in a "Functions" section to load.
  * @return			The DynamicHook on success, null otherwise.
  * @error			Invalid gamedata, plugin manager not initialized or GameData handle not initialized.
  */
-stock DynamicHook PM_AddDynamicHook(const char[] name)
+stock DynamicHook PM_AddDynamicHookFromConf(const char[] name)
 {
 	ThrowIfNotInitialized(true);
 	
 	DynamicHook hook = DynamicHook.FromConf(s_gamedata, name);
 	if (hook)
 	{
-		DHookData data;
-		strcopy(data.name, sizeof(data.name), name);
-		data.hook = hook;
-		
-		s_dynamicHooks.PushArray(data);
+		PM_AddDynamicHook(name, hook);
 		return hook;
 	}
 	else
@@ -356,6 +362,24 @@ stock DynamicHook PM_AddDynamicHook(const char[] name)
 		ThrowError("Failed to create hook setup handle '%s'", name);
 		return null;
 	}
+}
+
+/**
+ * Registers a dynamic hook.
+ *
+ * @param name			Name to register the dynamic hook as.
+ * @param detour		The DynamicHook object.
+ * @error				Plugin manager not initialized.
+ */
+stock void PM_AddDynamicHook(const char[] name, DynamicHook hook)
+{
+	ThrowIfNotInitialized(true);
+	
+	DHookData data;
+	strcopy(data.name, sizeof(data.name), name);
+	data.hook = hook;
+	
+	s_dynamicHooks.PushArray(data);
 }
 
 /**
@@ -389,14 +413,14 @@ stock void PM_RemoveDynamicHook(const char[] name)
  * Finds a dynamic hook by name and hooks an entity.
  * This function does nothing if the plugin is not currently enabled.
  *
- * @param entity		Entity index to hook on.
  * @param name			The name of the registered dynamic hook.
  * @param mode			The desired hook mode - pre or post. 
+ * @param entity		Entity index to hook on.
  * @param callback		Callback function.
  * @return				A hookid on success, INVALID_HOOK_ID otherwise.
- * @error					Plugin manager not initialized.
+ * @error				Plugin manager not initialized.
  */
-stock int PM_DynamicHookEntityByName(int entity, const char[] name, HookMode mode, DHookCallback callback)
+stock int PM_DynamicHookEntityFromConf(const char[] name, HookMode mode, int entity, DHookCallback callback)
 {
 	ThrowIfNotInitialized();
 	
@@ -405,27 +429,24 @@ stock int PM_DynamicHookEntityByName(int entity, const char[] name, HookMode mod
 	
 	int index = s_dynamicHooks.FindString(name, DHookData::name);
 	if (index == -1)
-	{
 		ThrowError("Failed to find dynamic hook '%s'", name);
-		return false;
-	}
 	
 	DynamicHook hook = s_dynamicHooks.Get(index, DHookData::hook);
-	return PM_DynamicHookEntity(entity, hook, mode, callback);
+	return PM_DynamicHookEntity(hook, mode, entity, callback);
 }
 
 /**
  * Hooks an entity.
  * This function does nothing if the plugin is not currently enabled.
  *
- * @param entity		Entity index to hook on.
  * @param hook			The DynamicHook handle.
  * @param mode			The desired hook mode - pre or post. 
+ * @param entity		Entity index to hook on.
  * @param callback		Callback function.
  * @return				A hookid on success, INVALID_HOOK_ID otherwise.
  * @error				Plugin manager not initialized.
  */
-stock int PM_DynamicHookEntity(int entity, DynamicHook hook, HookMode mode, DHookCallback callback)
+stock int PM_DynamicHookEntity(DynamicHook hook, HookMode mode, int entity, DHookCallback callback)
 {
 	ThrowIfNotInitialized();
 	
