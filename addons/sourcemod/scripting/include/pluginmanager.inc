@@ -687,11 +687,18 @@ stock void PM_AddSyncedConVar(const char[] name, ConVar relatedConVar)
 	s_convars.PushArray(data);
 }
 
-/*
- * TODO
+/**
+ * Registers an entity output hook.
+ *
+ * @param classname		The classname to hook.
+ * @param output		The output name to hook.
+ * @param callback		An EntityOutput function pointer.
+ * @error				Plugin manager not initialized.
  */
 stock void PM_AddEntityOutputHook(const char[] classname, const char[] output, EntityOutput callback)
 {
+	ThrowIfNotInitialized();
+	
 	EntityOutputData data;
 	strcopy(data.classname, sizeof(data.classname), classname);
 	strcopy(data.output, sizeof(data.output), output);
@@ -700,11 +707,18 @@ stock void PM_AddEntityOutputHook(const char[] classname, const char[] output, E
 	s_entityOutputs.PushArray(data);
 }
 
-/*
- * TODO
+/**
+ * Registers a command listener.
+ *
+ * @param callback		A CommandListener function pointer.
+ * @param command		Command, or if not specified, a global listener.
+ * 						The command is case insensitive.
+ * @error				Plugin manager not initialized.
  */
 stock void PM_AddCommandListener(CommandListener callback, const char[] command)
 {
+	ThrowIfNotInitialized();
+	
 	CommandListenerData data;
 	strcopy(data.command, sizeof(data.command), command);
 	data.callback = callback;
