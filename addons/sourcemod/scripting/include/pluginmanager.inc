@@ -420,7 +420,7 @@ stock void PM_RemoveDynamicHook(const char[] name)
  * @return				A hookid on success, INVALID_HOOK_ID otherwise.
  * @error				Plugin manager not initialized.
  */
-stock int PM_DynamicHookEntityFromConf(const char[] name, HookMode mode, int entity, DHookCallback callback)
+stock int PM_DynamicHookByName(const char[] name, HookMode mode, int entity, DHookCallback callback)
 {
 	ThrowIfNotInitialized();
 	
@@ -560,10 +560,9 @@ stock void PM_SDKUnhook(int entity)
  *
  * @param name		The name of the convar.
  * @param value		The value to enforce.
- * @return			True on success, false otherwise.
  * @error			Invalid convar name or plugin manager not initialized.
  */
-stock bool PM_AddEnforcedConVar(const char[] name, const char[] value)
+stock void PM_AddEnforcedConVar(const char[] name, const char[] value)
 {
 	ThrowIfNotInitialized();
 	
@@ -571,7 +570,6 @@ stock bool PM_AddEnforcedConVar(const char[] name, const char[] value)
 	if (!convar)
 	{
 		ThrowError("Failed to find convar '%s'", name);
-		return false;
 	}
 	
 	ConVarData data;
@@ -579,7 +577,6 @@ stock bool PM_AddEnforcedConVar(const char[] name, const char[] value)
 	strcopy(data.value, sizeof(data.value), value);
 	
 	s_convars.PushArray(data);
-	return true;
 }
 
 /**
@@ -587,10 +584,9 @@ stock bool PM_AddEnforcedConVar(const char[] name, const char[] value)
  *
  * @param name		The name of the convar.
  * @param value		The value to enforce.
- * @return			True on success, false otherwise.
  * @error			Invalid convar name or plugin manager not initialized.
  */
-stock bool PM_AddSyncedConVar(const char[] name, ConVar relatedConVar)
+stock void PM_AddSyncedConVar(const char[] name, ConVar relatedConVar)
 {
 	ThrowIfNotInitialized();
 	
@@ -598,7 +594,6 @@ stock bool PM_AddSyncedConVar(const char[] name, ConVar relatedConVar)
 	if (!convar)
 	{
 		ThrowError("Failed to find convar '%s'", name);
-		return false;
 	}
 	
 	ConVarData data;
@@ -606,7 +601,6 @@ stock bool PM_AddSyncedConVar(const char[] name, ConVar relatedConVar)
 	data.relatedConVar = relatedConVar;
 	
 	s_convars.PushArray(data);
-	return true;
 }
 
 /**

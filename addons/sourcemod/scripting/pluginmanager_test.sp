@@ -48,7 +48,7 @@ public void OnClientPutInServer(int client)
 	PM_DynamicHookEntity(g_hookSetModel, Hook_Pre, client, OnPlayerSetModelPre);
 	
 	// ...or access it by name, in case you don't want to store the hook handles yourself.
-	PM_DynamicHookEntityFromConf("CBaseEntity::SetModel", Hook_Pre, client, OnPlayerSetModelPre);
+	PM_DynamicHookByName("CBaseEntity::SetModel", Hook_Pre, client, OnPlayerSetModelPre);
 	
 	// Keep in mind that we just hooked the same entity twice, thus the hook will also fire twice.
 }
