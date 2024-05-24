@@ -4,7 +4,7 @@
 #include <dhooks>
 #include <sdkhooks>
 
-typedef PluginToggledHook = function void(bool enabled);
+typedef PluginStateChangedCallback = function void(bool enabled);
 
 enum struct EventData
 {
@@ -50,16 +50,16 @@ enum struct ConVarData
 
 static bool s_isInitialized;
 static bool s_isEnabled;
-static ConVar s_enableConvar;
+static ConVar s_stateConvar;
 static GameData s_gamedata;
 static PrivateForward s_toggledFwd;
 
-static ArrayList s_eventData; // ArrayList<EventData>
-static ArrayList s_detourData; // ArrayList <DetourData>
-static ArrayList s_dynamicHookData; // ArrayList<DHookData>
+static ArrayList s_events; // ArrayList<EventData>
+static ArrayList s_detours; // ArrayList <DetourData>
+static ArrayList s_dynamicHooks; // ArrayList<DHookData>
 static ArrayList s_dynamicHookIds; // ArrayList<DHookIdData>
-static ArrayList s_sdkHookData; // ArrayList<SDKHookData>
-static ArrayList s_conVars; // ArrayList<ConVarData>
+static ArrayList s_sdkHooks; // ArrayList<SDKHookData>
+static ArrayList s_convars; // ArrayList<ConVarData>
 
 //=============================================================================
 // Core Features
@@ -67,7 +67,7 @@ static ArrayList s_conVars; // ArrayList<ConVarData>
 
 /**
  * Initializes the plugin manager.
- * Typically called in the OnPluginStart forward.
+ * This function should be called in the OnPluginStart forward.
  *
  * @param convar		The convar used to determine whether the plugin should be enabled.
  * @param gamedata		Optional gamedata handle.
@@ -75,88 +75,86 @@ static ArrayList s_conVars; // ArrayList<ConVarData>
 stock void PM_Init(ConVar convar, GameData gamedata = null)
 {
 	if (s_isInitialized)
-	{
-		LogError("PluginManager can only be initialized once per plugin!");
 		return;
-	}
 	
-	s_enableConvar = convar;
-	s_enableConvar.AddChangeHook(OnEnableConVarChanged);
+	s_stateConvar = convar;
+	s_stateConvar.AddChangeHook(OnEnableConVarChanged);
 	
 	if (gamedata)
 		s_gamedata = view_as<GameData>(CloneHandle(gamedata));
 	
 	s_toggledFwd = new PrivateForward(ET_Ignore, Param_Cell);
-	s_eventData = new ArrayList(sizeof(EventData));
-	s_detourData = new ArrayList(sizeof(DetourData));
-	s_dynamicHookData = new ArrayList(sizeof(DHookData));
+	s_events = new ArrayList(sizeof(EventData));
+	s_detours = new ArrayList(sizeof(DetourData));
+	s_dynamicHooks = new ArrayList(sizeof(DHookData));
 	s_dynamicHookIds = new ArrayList(sizeof(DHookIdData));
-	s_sdkHookData = new ArrayList(sizeof(SDKHookData));
-	s_conVars = new ArrayList(sizeof(ConVarData));
+	s_sdkHooks = new ArrayList(sizeof(SDKHookData));
+	s_convars = new ArrayList(sizeof(ConVarData));
 	
 	s_isInitialized = true;
 }
 
 /**
- * Cleans up and resets anything set by the Plugin Manager.
- * Typically called in the OnPluginEnd forward.
+ * Convenience function that disables the plugin if it is enabled. Useful to clean up anything set by the plugin manager on plugin end.
+ * This function should be called in the OnPluginEnd forward.
+ *
+ * @error Plugin manager not initialized.
  */
 stock void PM_Cleanup()
 {
-	EnsureInitializedState();
+	ThrowIfNotInitialized();
 	
 	if (PM_IsEnabled())
-		PM_TogglePlugin(false);
+		PM_SetPluginState(false);
 }
 
 /**
  * Convenience function that toggles the enabled state of the plugin if it isn't in that state already.
- * Typically called in the OnConfigsExecuted forward.
+ * This function should be called in the OnConfigsExecuted forward.
+ *
+ * @error Plugin manager not initialized.
  */
-stock void PM_TogglePluginIfNecessary()
+stock void PM_TogglePluginStateIfNeeded()
 {
-	EnsureInitializedState();
+	ThrowIfNotInitialized();
 	
-	if (PM_IsEnabled() != s_enableConvar.BoolValue)
+	if (PM_IsEnabled() != s_stateConvar.BoolValue)
 	{
-		PM_TogglePlugin(s_enableConvar.BoolValue);
+		PM_SetPluginState(s_stateConvar.BoolValue);
 	}
 }
 
 /**
  * Sets the enabled state of the plugin.
- * Plugins generally want to use PM_TogglePluginIfNecessary to respect the convar.
+ * Most plugins should use PM_TogglePluginStateIfNeeded to respect the convar.
  *
  * @param enable		If true, the plugin will be enabled. If false, the plugin will be disabled.
- * @error				If the plugin was already in that state.
+ * @error				Plugin manager not initialized.
  */
-stock void PM_TogglePlugin(bool enable)
+stock void PM_SetPluginState(bool enable)
 {
-	EnsureInitializedState();
+	ThrowIfNotInitialized();
 	
 	if (PM_IsEnabled() == enable)
-	{
-		LogError("Attempted to set plugin into state it already is in!");
 		return;
-	}
 	
 	s_isEnabled = enable;
 	
 	// Events
-	for (int i = 0; i < s_eventData.Length; i++)
+	for (int i = 0; i < s_events.Length; i++)
 	{
 		EventData data;
-		if (s_eventData.GetArray(i, data))
+		if (s_events.GetArray(i, data))
 		{
 			ToggleEvent(data, enable);
 		}
 	}
 	
 	// Detours
-	for (int i = 0; i < s_detourData.Length; i++)
+	for (int i = 0; i < s_detours.Length; i++)
 	{
 		DetourData data;
-		if (s_detourData.GetArray(i, data))
+		if (s_detours.GetArray(i, data))
 		{
 			ToggleDetour(data, enable);
 		}
@@ -179,7 +177,7 @@ stock void PM_TogglePlugin(bool enable)
 		}
 	}
 	
-	for (int i = 0; i < s_conVars.Length; i++)
+	for (int i = 0; i < s_convars.Length; i++)
 	{
 		ToggleConVar(i, enable);
 	}
@@ -190,16 +188,17 @@ stock void PM_TogglePlugin(bool enable)
 }
 
 /**
- * Adds a callback that is triggered when the enabled state of the plugin changes.
+ * Registers a callback function that is called when the state of the plugin changes.
  *
- * @param func		Function callback.
+ * @param func		A PluginStateChangedCallback function pointer.
  * @return			True on success, false otherwise.
+ * @error			Plugin manager not initialized.
  */
-stock bool PM_AddPluginToggledHook(PluginToggledHook hook)
+stock bool PM_AddPluginStateChangedHook(PluginStateChangedCallback func)
 {
-	EnsureInitializedState();
+	ThrowIfNotInitialized();
 	
-	return s_toggledFwd.AddFunction(null, hook);
+	return s_toggledFwd.AddFunction(null, func);
 }
 
 //=============================================================================
@@ -213,11 +212,11 @@ stock bool PM_AddPluginToggledHook(PluginToggledHook hook)
  * @param callback		An EventHook function pointer.
  * @param mode			Optional EventHookMode determining the type of hook.
  * @return				True on success, false otherwise.
- * @error				Invalid event name.
+ * @error				Invalid event name or plugin manager not initialized.
  */
 stock bool PM_AddEventHook(const char[] name, EventHook callback, EventHookMode mode = EventHookMode_Post)
 {
-	EnsureInitializedState();
+	ThrowIfNotInitialized();
 	
 	Event event = CreateEvent(name, true);
 	if (event)
@@ -229,12 +228,12 @@ stock bool PM_AddEventHook(const char[] name, EventHook callback, EventHookMode 
 		data.callback = callback;
 		data.mode = mode;
 		
-		s_eventData.PushArray(data);
+		s_events.PushArray(data);
 		return true;
 	}
 	else
 	{
-		LogError("Failed to find event '%s'", name);
+		ThrowError("Failed to find event '%s'", name);
 		return false;
 	}
 }
@@ -245,20 +244,21 @@ stock bool PM_AddEventHook(const char[] name, EventHook callback, EventHookMode 
  * @param name			Name of event.
  * @param callback		An EventHook function pointer.
  * @param mode			Optional EventHookMode determining the type of hook.
+ * @error				Plugin manager not initialized.
  */
 stock void PM_RemoveEventHook(const char[] name, EventHook callback, EventHookMode mode = EventHookMode_Post)
 {
-	EnsureInitializedState();
+	ThrowIfNotInitialized();
 	
-	for (int i = 0; i < s_eventData.Length; i++)
+	for (int i = 0; i < s_events.Length; i++)
 	{
 		EventData data;
-		if (s_eventData.GetArray(i, data) && StrEqual(name, data.name) && callback == data.callback && mode == data.mode)
+		if (s_events.GetArray(i, data) && StrEqual(name, data.name) && callback == data.callback && mode == data.mode)
 		{
 			if (PM_IsEnabled())
 				ToggleEvent(data, false);
 			
-			s_eventData.Erase(i);
+			s_events.Erase(i);
 		}
 	}
 }
@@ -275,10 +275,11 @@ stock void PM_RemoveEventHook(const char[] name, EventHook callback, EventHookMo
  * @param callbackPre		Optional pre callback function.
  * @param callbackPost		Optional post callback function.
  * @return					True on success, false otherwise.
+ * @error					Invalid gamedata, plugin manager not initialized or GameData handle not initialized.
  */
 stock bool PM_AddDynamicDetour(const char[] name, DHookCallback callbackPre = INVALID_FUNCTION, DHookCallback callbackPost = INVALID_FUNCTION)
 {
-	EnsureInitializedState(true);
+	ThrowIfNotInitialized(true);
 	
 	DynamicDetour detour = DynamicDetour.FromConf(s_gamedata, name);
 	if (detour)
@@ -289,12 +290,12 @@ stock bool PM_AddDynamicDetour(const char[] name, DHookCallback callbackPre = IN
 		data.callbackPre = callbackPre;
 		data.callbackPost = callbackPost;
 		
-		s_detourData.PushArray(data);
+		s_detours.PushArray(data);
 		return true;
 	}
 	else
 	{
-		LogError("Failed to create detour setup handle '%s'", name);
+		ThrowError("Failed to create detour setup handle '%s'", name);
 		return false;
 	}
 }
@@ -305,20 +306,21 @@ stock bool PM_AddDynamicDetour(const char[] name, DHookCallback callbackPre = IN
  * @param name          	Name of the function in a "Functions" section to load.
  * @param callbackPre		Optional pre callback function.
  * @param callbackPost		Optional post callback function.
+ * @error					Plugin manager not initialized.
  */
 stock void PM_RemoveDynamicDetour(const char[] name, DHookCallback callbackPre = INVALID_FUNCTION, DHookCallback callbackPost = INVALID_FUNCTION)
 {
-	EnsureInitializedState();
+	ThrowIfNotInitialized();
 	
-	for (int i = s_detourData.Length - 1; i >= 0; i--)
+	for (int i = s_detours.Length - 1; i >= 0; i--)
 	{
 		DetourData data;
-		if (s_detourData.GetArray(i, data) && StrEqual(name, data.name) && callbackPre == data.callbackPre && callbackPost == data.callbackPost)
+		if (s_detours.GetArray(i, data) && StrEqual(name, data.name) && callbackPre == data.callbackPre && callbackPost == data.callbackPost)
 		{
 			if (PM_IsEnabled())
 				ToggleDetour(data, false);
 			
-			s_detourData.Erase(i);
+			s_detours.Erase(i);
 		}
 	}
 }
@@ -333,10 +335,11 @@ stock void PM_RemoveDynamicDetour(const char[] name, DHookCallback callbackPre =
  *
  * @param name		Name of the function in a "Functions" section to load.
  * @return			The DynamicHook on success, null otherwise.
+ * @error			Invalid gamedata, plugin manager not initialized or GameData handle not initialized.
  */
 stock DynamicHook PM_AddDynamicHook(const char[] name)
 {
-	EnsureInitializedState(true);
+	ThrowIfNotInitialized(true);
 	
 	DynamicHook hook = DynamicHook.FromConf(s_gamedata, name);
 	if (hook)
@@ -345,12 +348,12 @@ stock DynamicHook PM_AddDynamicHook(const char[] name)
 		strcopy(data.name, sizeof(data.name), name);
 		data.hook = hook;
 		
-		s_dynamicHookData.PushArray(data);
+		s_dynamicHooks.PushArray(data);
 		return hook;
 	}
 	else
 	{
-		LogError("Failed to create hook setup handle '%s'", name);
+		ThrowError("Failed to create hook setup handle '%s'", name);
 		return null;
 	}
 }
@@ -358,16 +361,17 @@ stock DynamicHook PM_AddDynamicHook(const char[] name)
 /**
  * Unregisters a dynamic hook.
  *
- * @param name          	The name of the registered dynamic hook.
+ * @param name		The name of the registered dynamic hook.
+ * @error			Plugin manager not initialized.
  */
 stock void PM_RemoveDynamicHook(const char[] name)
 {
-	EnsureInitializedState();
+	ThrowIfNotInitialized();
 	
-	for (int i = s_dynamicHookData.Length - 1; i >= 0; i--)
+	for (int i = s_dynamicHooks.Length - 1; i >= 0; i--)
 	{
 		DHookData data;
-		if (s_dynamicHookData.GetArray(i, data) && StrEqual(name, data.name))
+		if (s_dynamicHooks.GetArray(i, data) && StrEqual(name, data.name))
 		{
 			// Unhook any entities that belong to this hook
 			for (int j = s_dynamicHookIds.Length - 1; j >= 0; j--)
@@ -376,13 +380,13 @@ stock void PM_RemoveDynamicHook(const char[] name)
 					DynamicHook.RemoveHook(s_dynamicHookIds.Get(j, DHookIdData::hookid));
 			}
 			
-			s_dynamicHookData.Erase(i);
+			s_dynamicHooks.Erase(i);
 		}
 	}
 }
 
 /**
- * Finds a dynamic hook by name and attaches it to an entity.
+ * Finds a dynamic hook by name and hooks an entity.
  * This function does nothing if the plugin is not currently enabled.
  *
  * @param entity		Entity index to hook on.
@@ -390,27 +394,28 @@ stock void PM_RemoveDynamicHook(const char[] name)
  * @param mode			The desired hook mode - pre or post. 
  * @param callback		Callback function.
  * @return				A hookid on success, INVALID_HOOK_ID otherwise.
+ * @error					Plugin manager not initialized.
  */
 stock int PM_DynamicHookEntityByName(int entity, const char[] name, HookMode mode, DHookCallback callback)
 {
-	EnsureInitializedState();
+	ThrowIfNotInitialized();
 	
 	if (!PM_IsEnabled())
 		return INVALID_HOOK_ID;
 	
-	int index = s_dynamicHookData.FindString(name, DHookData::name);
+	int index = s_dynamicHooks.FindString(name, DHookData::name);
 	if (index == -1)
 	{
-		LogError("Failed to find dynamic hook for '%s'", name);
+		ThrowError("Failed to find dynamic hook '%s'", name);
 		return false;
 	}
 	
-	DynamicHook hook = s_dynamicHookData.Get(index, DHookData::hook);
+	DynamicHook hook = s_dynamicHooks.Get(index, DHookData::hook);
 	return PM_DynamicHookEntity(entity, hook, mode, callback);
 }
 
 /**
- * Attaches a dynamic hook to an entity.
+ * Hooks an entity.
  * This function does nothing if the plugin is not currently enabled.
  *
  * @param entity		Entity index to hook on.
@@ -418,10 +423,11 @@ stock int PM_DynamicHookEntityByName(int entity, const char[] name, HookMode mod
  * @param mode			The desired hook mode - pre or post. 
  * @param callback		Callback function.
  * @return				A hookid on success, INVALID_HOOK_ID otherwise.
+ * @error				Plugin manager not initialized.
  */
 stock int PM_DynamicHookEntity(int entity, DynamicHook hook, HookMode mode, DHookCallback callback)
 {
-	EnsureInitializedState();
+	ThrowIfNotInitialized();
 	
 	if (!PM_IsEnabled())
 		return INVALID_HOOK_ID;
@@ -447,10 +453,11 @@ stock int PM_DynamicHookEntity(int entity, DynamicHook hook, HookMode mode, DHoo
  * @param mode			The desired hook mode - pre or post. 
  * @param callback		Callback function.
  * @return				A hookid on success, INVALID_HOOK_ID otherwise.
+ * @error				Plugin manager not initialized.
  */
 stock int PM_DynamicHookGameRules(DynamicHook hook, HookMode mode, DHookCallback callback)
 {
-	EnsureInitializedState();
+	ThrowIfNotInitialized();
 	
 	if (!PM_IsEnabled())
 		return INVALID_HOOK_ID;
@@ -473,17 +480,18 @@ stock int PM_DynamicHookGameRules(DynamicHook hook, HookMode mode, DHookCallback
 //=============================================================================
 
 /**
- * Attaches an SDKHook to an entity.
+ * Hooks an entity.
  * This function does nothing if the plugin is not currently enabled.
  *
  * @param entity		Entity index.
  * @param type			Type of function to hook.
  * @param callback		Function to call when hook is called.
  * @return				True on success, false otherwise.
+ * @error				Plugin manager not initialized.
  */
 stock bool PM_SDKHook(int entity, SDKHookType type, SDKHookCB callback)
 {
-	EnsureInitializedState();
+	ThrowIfNotInitialized();
 	
 	if (!PM_IsEnabled())
 		return false;
@@ -493,30 +501,31 @@ stock bool PM_SDKHook(int entity, SDKHookType type, SDKHookCB callback)
 	data.type = type;
 	data.callback = callback;
 	
-	s_sdkHookData.PushArray(data);
+	s_sdkHooks.PushArray(data);
 	
 	SDKHook(entity, type, callback);
 	return true;
 }
 
 /**
- * Removes an SDKHook from an entity.
+ * Unhooks an entity.
  *
  * @param entity		Entity index.
+ * @error				Plugin manager not initialized.
  */
 stock void PM_SDKUnhook(int entity)
 {
-	EnsureInitializedState();
+	ThrowIfNotInitialized();
 	
 	int ref = IsValidEdict(entity) ? EntIndexToEntRef(entity) : entity;
 	
-	for (int i = s_sdkHookData.Length - 1; i >= 0; i--)
+	for (int i = s_sdkHooks.Length - 1; i >= 0; i--)
 	{
 		SDKHookData data;
-		if (s_sdkHookData.GetArray(i, data) && ref == data.ref)
+		if (s_sdkHooks.GetArray(i, data) && ref == data.ref)
 		{
 			SDKUnhook(data.ref, data.type, data.callback);
-			s_sdkHookData.Erase(i);
+			s_sdkHooks.Erase(i);
 		}
 	}
 }
@@ -526,20 +535,21 @@ stock void PM_SDKUnhook(int entity)
 //=============================================================================
 
 /**
- * Adds an "enforced" convar, meaning that its value will be enforced even if it is changed by configs or other plugins.
+ * Registers an "enforced" convar, meaning that its value will be enforced even if it is changed by configs or other plugins.
  *
  * @param name		The name of the convar.
  * @param value		The value to enforce.
  * @return			True on success, false otherwise.
+ * @error			Invalid convar name or plugin manager not initialized.
  */
 stock bool PM_AddEnforcedConVar(const char[] name, const char[] value)
 {
-	EnsureInitializedState();
+	ThrowIfNotInitialized();
 	
 	ConVar convar = FindConVar(name);
 	if (!convar)
 	{
-		LogError("Failed to find convar with name %s", name);
+		ThrowError("Failed to find convar '%s'", name);
 		return false;
 	}
 	
@@ -547,25 +557,26 @@ stock bool PM_AddEnforcedConVar(const char[] name, const char[] value)
 	strcopy(data.name, sizeof(data.name), name);
 	strcopy(data.value, sizeof(data.value), value);
 	
-	s_conVars.PushArray(data);
+	s_convars.PushArray(data);
 	return true;
 }
 
 /**
- * Adds a "synced" convar, meaning that its value will always be kept in sync with another convar.
+ * Registers a "synced" convar, meaning that its value will always be kept in sync with another convar.
  *
  * @param name		The name of the convar.
  * @param value		The value to enforce.
  * @return			True on success, false otherwise.
+ * @error			Invalid convar name or plugin manager not initialized.
  */
 stock bool PM_AddSyncedConVar(const char[] name, ConVar relatedConVar)
 {
-	EnsureInitializedState();
+	ThrowIfNotInitialized();
 	
 	ConVar convar = FindConVar(name);
 	if (!convar)
 	{
-		LogError("Failed to find convar with name %s", name);
+		ThrowError("Failed to find convar '%s'", name);
 		return false;
 	}
 	
@@ -573,7 +584,7 @@ stock bool PM_AddSyncedConVar(const char[] name, ConVar relatedConVar)
 	strcopy(data.name, sizeof(data.name), name);
 	data.relatedConVar = relatedConVar;
 	
-	s_conVars.PushArray(data);
+	s_convars.PushArray(data);
 	return true;
 }
 
@@ -581,6 +592,7 @@ stock bool PM_AddSyncedConVar(const char[] name, ConVar relatedConVar)
  * Returns whether the Plugin Manager is initialized.
  *
  * @return		True if initialized, false otherwise.
+ * @error		Plugin manager not initialized.
  */
 stock bool PM_IsInitialized()
 {
@@ -590,7 +602,8 @@ stock bool PM_IsInitialized()
 /**
  * Returns whether the plugin is currently enabled.
  *
- * @return		True if it is enabled, false otherwise.
+ * @return		True if enabled, false otherwise.
+ * @error		Plugin manager not initialized.
  */
 stock bool PM_IsEnabled()
 {
@@ -599,22 +612,22 @@ stock bool PM_IsEnabled()
 
 //*******************************************************************************************************************************************************
 
-static void EnsureInitializedState(bool requireGameData = false)
+static void ThrowIfNotInitialized(bool requireGameData = false)
 {
 	if (!PM_IsInitialized())
 	{
-		SetFailState("PluginManager is not initialized! Call 'PM_Init' to use this function!");
+		ThrowError("The plugin manager is not initialized! Call 'PM_Init' to use this function!");
 	}
 	
 	if (requireGameData && !s_gamedata)
 	{
-		SetFailState("GameData handle is not initialized! Pass a valid GameData handle to 'PM_Init' to use this function!");
+		ThrowError("GameData handle is not initialized! Pass a valid GameData handle to 'PM_Init' to use this function!");
 	}
 }
 
 static void OnEnableConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
-	PM_TogglePluginIfNecessary();
+	PM_TogglePluginStateIfNeeded();
 }
 
 static void OnDynamicHookRemoved(int hookid)
@@ -654,13 +667,13 @@ static void ToggleEvent(EventData data, bool enable)
 static void ToggleConVar(int index, bool enable)
 {
 	ConVarData data;
-	if (!s_conVars.GetArray(index, data))
+	if (!s_convars.GetArray(index, data))
 		return;
 	
 	ConVar convar = FindConVar(data.name);
 	if (!convar)
 		return;
-	PrintToServer(data.name);
+	
 	if (enable)
 	{
 		// Store the current value so we can reset the convar on disable
@@ -669,14 +682,14 @@ static void ToggleConVar(int index, bool enable)
 		// Copy the value from the setting convar if it isn't set
 		if (!data.value[0] && data.relatedConVar)
 		{
-			char value[512];
+			char value[64];
 			data.relatedConVar.GetString(value, sizeof(value));
 			strcopy(data.value, sizeof(data.value), value);
 			
 			data.relatedConVar.AddChangeHook(OnRelatedConVarChanged);
 		}
 		
-		s_conVars.SetArray(index, data);
+		s_convars.SetArray(index, data);
 		
 		// Update the current value
 		convar.SetString(data.value);
@@ -694,28 +707,28 @@ static void ToggleConVar(int index, bool enable)
 			data.value[0] = EOS;
 			data.relatedConVar.RemoveChangeHook(OnRelatedConVarChanged);
 			
-			s_conVars.SetArray(index, data);
+			s_convars.SetArray(index, data);
 		}
 	}
 }
 
 static void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
-	char name[512];
+	char name[64];
 	convar.GetName(name, sizeof(name));
 	
-	int index = s_conVars.FindString(name);
+	int index = s_convars.FindString(name);
 	if (index == -1)
 		return;
 	
 	ConVarData data;
-	if (s_conVars.GetArray(index, data))
+	if (s_convars.GetArray(index, data))
 	{
 		if (!StrEqual(newValue, data.value))
 		{
 			// Update value to reset
 			strcopy(data.initialValue, sizeof(data.initialValue), newValue);
-			s_conVars.SetArray(index, data);
+			s_convars.SetArray(index, data);
 			
 			// Restore our desired value
 			convar.SetString(oldValue);
@@ -725,12 +738,12 @@ static void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] n
 
 static void OnRelatedConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
-	int index = s_conVars.FindValue(convar, ConVarData::relatedConVar);
+	int index = s_convars.FindValue(convar, ConVarData::relatedConVar);
 	if (index == -1)
 		return;
 	
 	ConVarData data;
-	if (s_conVars.GetArray(index, data))
+	if (s_convars.GetArray(index, data))
 	{
 		ConVar actualConVar = FindConVar(data.name);
 		if (!actualConVar)

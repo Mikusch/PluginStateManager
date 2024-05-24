@@ -18,7 +18,7 @@ public void OnPluginStart()
 	delete gamedata;
 	
 	// Specify a callback to fire whenever the plugin is enabled or disabled.
-	PM_AddPluginToggledHook(OnPluginToggled);
+	PM_AddPluginStateChangedHook(OnPluginStateChanged);
 	
 	// Add events, detours, etc. to be hooked when the plugin enables.
 	PM_AddEventHook("player_spawn", OnGameEvent_player_spawn);
@@ -29,6 +29,12 @@ public void OnPluginStart()
 	g_hookSetModel = PM_AddDynamicHook("CBaseEntity::SetModel");
 	
 	PM_AddEnforcedConVar("tf_forced_holiday", "2");
+}
+
+public void OnConfigsExecuted()
+{
+	// This will enable the plugin if the specified convar's value is true.
+	PM_TogglePluginStateIfNeeded();
 }
 
 public void OnPluginEnd()
@@ -56,13 +62,7 @@ public void OnEntityCreated(int entity, const char[] classname)
 	}
 }
 
-public void OnConfigsExecuted()
-{
-	// This will enable the plugin if the specified convar's value is true.
-	PM_TogglePluginIfNecessary();
-}
-
-static void OnPluginToggled(bool enable)
+static void OnPluginStateChanged(bool enable)
 {
 	LogMessage("Plugin changed state to [%s]", enable ? "enabled" : "disabled");
 	
