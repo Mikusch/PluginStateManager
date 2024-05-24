@@ -2,8 +2,11 @@
 #pragma newdecls required
 
 #include <dhooks>
+#include <sdkhooks>
 
 typedef PluginToggledHook = function void(bool enabled);
+typedef EntityCreatedHook = function void(int entity, const char[] classname);
+typedef EntityDestroyedHook = function void(int entity, const char[] classname);
 
 enum struct EventData
 {
@@ -32,6 +35,13 @@ enum struct DHookIdData
 	DynamicHook hook;
 }
 
+enum struct SDKHookData
+{
+	int ref;
+	SDKHookType type;
+	SDKHookCB callback;
+}
+
 static bool s_isInitialized;
 static bool s_isEnabled;
 static ConVar s_enableConvar;
@@ -42,6 +52,7 @@ static ArrayList s_eventData; // ArrayList<EventData>
 static ArrayList s_detourData; // ArrayList <DetourData>
 static ArrayList s_dynamicHookData; // ArrayList<DHookData>
 static ArrayList s_dynamicHookIds; // ArrayList<DHookIdData>
+static ArrayList g_sdkHookData; // ArrayList<SDKHookData>
 
 methodmap PluginManager
 {
@@ -74,6 +85,7 @@ methodmap PluginManager
 		s_detourData = new ArrayList(sizeof(DetourData));
 		s_dynamicHookData = new ArrayList(sizeof(DHookData));
 		s_dynamicHookIds = new ArrayList(sizeof(DHookIdData));
+		g_sdkHookData = new ArrayList(sizeof(SDKHookData));
 		
 		s_isInitialized = true;
 	}
@@ -141,6 +153,30 @@ methodmap PluginManager
 			}
 		}
 		
+		int entity = -1;
+		while ((entity = FindEntityByClassname(entity, "*")) != -1)
+		{
+			if (enable)
+			{
+				char classname[64];
+				if (!GetEntityClassname(entity, classname, sizeof(classname)))
+					continue;
+				
+				Function func = GetFunctionByName(null, "OnEntityCreated");
+				if (func != INVALID_FUNCTION)
+				{
+					Call_StartFunction(null, func);
+					Call_PushCell(entity);
+					Call_PushString(classname);
+					Call_Finish();
+				}
+			}
+			else
+			{
+				PluginManager.SDKUnhookEntity(entity);
+			}
+		}
+		
 		Call_StartForward(s_toggledFwd);
 		Call_PushCell(enable);
 		Call_Finish();
@@ -202,9 +238,8 @@ methodmap PluginManager
 	 * @param name			Name of event.
 	 * @param callback		An EventHook function pointer.
 	 * @param mode			Optional EventHookMode determining the type of hook.
-	 * @return				True on success, false otherwise.
 	 */
-	public static bool RemoveEventHook(const char[] name, EventHook callback, EventHookMode mode = EventHookMode_Post)
+	public static void RemoveEventHook(const char[] name, EventHook callback, EventHookMode mode = EventHookMode_Post)
 	{
 		EnsureInitializedState();
 		
@@ -217,12 +252,8 @@ methodmap PluginManager
 					ToggleEvent(data, false);
 				
 				s_eventData.Erase(i);
-				return true;
 			}
 		}
-		
-		LogError("Failed to find event '%s' in the registry", name);
-		return false;
 	}
 	
 	//=============================================================================
@@ -267,13 +298,12 @@ methodmap PluginManager
 	 * @param name          	Name of the function in a "Functions" section to load.
 	 * @param callbackPre		Optional pre callback function.
 	 * @param callbackPost		Optional post callback function.
-	 * @return					True on success, false otherwise.
 	 */
-	public static bool RemoveDynamicDetour(const char[] name, DHookCallback callbackPre = INVALID_FUNCTION, DHookCallback callbackPost = INVALID_FUNCTION)
+	public static void RemoveDynamicDetour(const char[] name, DHookCallback callbackPre = INVALID_FUNCTION, DHookCallback callbackPost = INVALID_FUNCTION)
 	{
 		EnsureInitializedState();
 		
-		for (int i = 0; i < s_detourData.Length; i++)
+		for (int i = s_detourData.Length - 1; i >= 0; i--)
 		{
 			DetourData data;
 			if (s_detourData.GetArray(i, data) && StrEqual(name, data.name) && callbackPre == data.callbackPre && callbackPost == data.callbackPost)
@@ -282,12 +312,8 @@ methodmap PluginManager
 					ToggleDetour(data, false);
 				
 				s_detourData.Erase(i);
-				return true;
 			}
 		}
-		
-		LogError("Failed to find detour '%s' in the registry", name);
-		return false;
 	}
 	
 	//=============================================================================
@@ -326,13 +352,12 @@ methodmap PluginManager
 	 * Unregisters a dynamic hook.
 	 *
 	 * @param name          	The name of the registered dynamic hook.
-	 * @return					True on success, false otherwise.
 	 */
-	public static bool RemoveDynamicHook(const char[] name)
+	public static void RemoveDynamicHook(const char[] name)
 	{
 		EnsureInitializedState();
 		
-		for (int i = 0; i < s_dynamicHookData.Length; i++)
+		for (int i = s_dynamicHookData.Length - 1; i >= 0; i--)
 		{
 			DHookData data;
 			if (s_dynamicHookData.GetArray(i, data) && StrEqual(name, data.name))
@@ -345,16 +370,13 @@ methodmap PluginManager
 				}
 				
 				s_dynamicHookData.Erase(i);
-				return true;
 			}
 		}
-		
-		LogError("Failed to find dynamic hook '%s' in the registry", name);
-		return false;
 	}
 	
 	/**
-	 * Finds a dynamic hook by name and hooks the provided entity.
+	 * Finds a dynamic hook by name and attaches it to an entity.
+	 * This function does nothing if the plugin is not currently enabled.
 	 *
 	 * @param entity		Entity index to hook on.
 	 * @param name			The name of the registered dynamic hook.
@@ -365,6 +387,9 @@ methodmap PluginManager
 	public static int DynamicHookEntityByName(int entity, const char[] name, HookMode mode, DHookCallback callback)
 	{
 		EnsureInitializedState();
+		
+		if (!PluginManager.IsEnabled())
+			return INVALID_HOOK_ID;
 		
 		int index = s_dynamicHookData.FindString(name, DHookData::name);
 		if (index == -1)
@@ -378,7 +403,8 @@ methodmap PluginManager
 	}
 	
 	/**
-	 * Hooks the provided entity.
+	 * Attaches a dynamic hook to an entity.
+	 * This function does nothing if the plugin is not currently enabled.
 	 *
 	 * @param entity		Entity index to hook on.
 	 * @param hook			The DynamicHook handle.
@@ -389,6 +415,9 @@ methodmap PluginManager
 	public static int DynamicHookEntity(int entity, DynamicHook hook, HookMode mode, DHookCallback callback)
 	{
 		EnsureInitializedState();
+		
+		if (!PluginManager.IsEnabled())
+			return INVALID_HOOK_ID;
 		
 		int hookid = hook.HookEntity(Hook_Pre, entity, callback, OnDynamicHookRemoved);
 		if (hookid != INVALID_HOOK_ID)
@@ -405,6 +434,7 @@ methodmap PluginManager
 	
 	/**
 	 * Hooks the gamerules object.
+	 * This function does nothing if the plugin is not currently enabled.
 	 *
 	 * @param hook			The DynamicHook handle.
 	 * @param mode			The desired hook mode - pre or post. 
@@ -414,6 +444,9 @@ methodmap PluginManager
 	public static int DynamicHookGameRules(DynamicHook hook, HookMode mode, DHookCallback callback)
 	{
 		EnsureInitializedState();
+		
+		if (!PluginManager.IsEnabled())
+			return INVALID_HOOK_ID;
 		
 		int hookid = hook.HookGamerules(mode, callback, OnDynamicHookRemoved);
 		if (hookid != INVALID_HOOK_ID)
@@ -426,6 +459,59 @@ methodmap PluginManager
 		}
 		
 		return hookid;
+	}
+	
+	//=============================================================================
+	// SDKHooks
+	//=============================================================================
+	
+	/**
+	 * Attaches an SDKHook to an entity.
+	 * This function does nothing if the plugin is not currently enabled.
+	 *
+	 * @param entity		Entity index.
+	 * @param type			Type of function to hook.
+	 * @param callback		Function to call when hook is called.
+	 * @return				True on success, false otherwise.
+	 */
+	public static bool SDKHookEntity(int entity, SDKHookType type, SDKHookCB callback)
+	{
+		EnsureInitializedState();
+		
+		if (!PluginManager.IsEnabled())
+			return false;
+		
+		SDKHookData data;
+		data.ref = IsValidEdict(entity) ? EntIndexToEntRef(entity) : entity;
+		data.type = type;
+		data.callback = callback;
+		
+		g_sdkHookData.PushArray(data);
+		
+		SDKHook(entity, type, callback);
+		return true;
+	}
+	
+	/**
+	 * Removes an SDKHook from an entity.
+	 *
+	 * @param entity		Entity index.
+	 */
+	public static void SDKUnhookEntity(int entity)
+	{
+		EnsureInitializedState();
+		
+		int ref = IsValidEdict(entity) ? EntIndexToEntRef(entity) : entity;
+		
+		for (int i = g_sdkHookData.Length - 1; i >= 0; i--)
+		{
+			SDKHookData data;
+			if (g_sdkHookData.GetArray(i, data) && ref == data.ref)
+			{
+				SDKUnhook(data.ref, data.type, data.callback);
+				g_sdkHookData.Erase(i);
+			}
+		}
 	}
 	
 	public static bool IsInitialized()

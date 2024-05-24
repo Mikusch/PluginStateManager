@@ -41,6 +41,19 @@ public void OnClientPutInServer(int client)
 	PluginManager.DynamicHookEntityByName(client, "CBaseEntity::SetModel", Hook_Pre, OnPlayerSetModelPre);
 }
 
+public void OnEntityCreated(int entity, const char[] classname)
+{
+	if (StrEqual(classname, "prop_dynamic"))
+	{
+		PluginManager.SDKHookEntity(entity, SDKHook_SpawnPost, OnPropSpawned);
+	}
+}
+
+static void OnPropSpawned(int beam)
+{
+	LogMessage("prop_dynamic (%d) spawned!", beam);
+}
+
 public void OnConfigsExecuted()
 {
 	// This will enable the plugin if the specified convar's value is true
