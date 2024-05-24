@@ -48,6 +48,19 @@ enum struct ConVarData
 	ConVar relatedConVar;
 }
 
+enum struct EntityOutputData
+{
+	char classname[64];
+	char output[64];
+	EntityOutput callback;
+}
+
+enum struct CommandListenerData
+{
+	char command[64];
+	CommandListener callback;
+}
+
 static bool s_isInitialized;
 static bool s_isEnabled;
 static ConVar s_stateConvar;
@@ -60,6 +73,8 @@ static ArrayList s_dynamicHooks; // ArrayList<DHookData>
 static ArrayList s_dynamicHookIds; // ArrayList<DHookIdData>
 static ArrayList s_sdkHooks; // ArrayList<SDKHookData>
 static ArrayList s_convars; // ArrayList<ConVarData>
+static ArrayList s_entityOutputs; // ArrayList<EntityOutputData>
+static ArrayList s_commandListeners; // ArrayList<CommandListenerData>
 
 //=============================================================================
 // Core Features
@@ -90,6 +105,8 @@ stock void PM_Init(ConVar convar, GameData gamedata = null)
 	s_dynamicHookIds = new ArrayList(sizeof(DHookIdData));
 	s_sdkHooks = new ArrayList(sizeof(SDKHookData));
 	s_convars = new ArrayList(sizeof(ConVarData));
+	s_entityOutputs = new ArrayList(sizeof(EntityOutputData));
+	s_commandListeners = new ArrayList(sizeof(CommandListenerData));
 	
 	s_isInitialized = true;
 }
@@ -162,7 +179,7 @@ stock void PM_SetPluginState(bool enable)
 	
 	if (!enable)
 	{
-		// Dynamic Hooks
+		// Dynamic hooks
 		for (int i = s_dynamicHookIds.Length - 1; i >= 0; i--)
 		{
 			int hookid = s_dynamicHookIds.Get(i, DHookIdData::hookid);
@@ -174,6 +191,26 @@ stock void PM_SetPluginState(bool enable)
 		while ((entity = FindEntityByClassname(entity, "*")) != -1)
 		{
 			PM_SDKUnhook(entity);
+		}
+	}
+	
+	// Entity outputs
+	for (int i = 0; i < s_entityOutputs.Length; i++)
+	{
+		EntityOutputData data;
+		if (s_entityOutputs.GetArray(i, data))
+		{
+			TooggleEntityOutputHook(data, enable);
+		}
+	}
+	
+	// Command listeners
+	for (int i = 0; i < s_commandListeners.Length; i++)
+	{
+		CommandListenerData data;
+		if (s_commandListeners.GetArray(i, data))
+		{
+			ToggleCommandListener(data, enable);
 		}
 	}
 	
@@ -201,12 +238,34 @@ stock bool PM_AddPluginStateChangedHook(PluginStateChangedCallback func)
 	return s_toggledFwd.AddFunction(null, func);
 }
 
+/**
+ * Returns whether the Plugin Manager is initialized.
+ *
+ * @return		True if initialized, false otherwise.
+ * @error		Plugin manager not initialized.
+ */
+stock bool PM_IsInitialized()
+{
+	return s_isInitialized;
+}
+
+/**
+ * Returns whether the plugin is currently enabled.
+ *
+ * @return		True if enabled, false otherwise.
+ * @error		Plugin manager not initialized.
+ */
+stock bool PM_IsEnabled()
+{
+	return s_isEnabled;
+}
+
 //=============================================================================
 // Events
 //=============================================================================
 
 /**
- * Registers an event to be hooked when the plugin gets enabled.
+ * Registers an event hook.
  *
  * @param name			Name of event.
  * @param callback		An EventHook function pointer.
@@ -236,7 +295,7 @@ stock void PM_AddEventHook(const char[] name, EventHook callback, EventHookMode 
 }
 
 /**
- * Unregisters an event to be hooked when the plugin gets enabled.
+ * Unregisters an event hook.
  *
  * @param name			Name of event.
  * @param callback		An EventHook function pointer.
@@ -603,26 +662,29 @@ stock void PM_AddSyncedConVar(const char[] name, ConVar relatedConVar)
 	s_convars.PushArray(data);
 }
 
-/**
- * Returns whether the Plugin Manager is initialized.
- *
- * @return		True if initialized, false otherwise.
- * @error		Plugin manager not initialized.
+/*
+ * TODO
  */
-stock bool PM_IsInitialized()
+stock void PM_AddEntityOutputHook(const char[] classname, const char[] output, EntityOutput callback)
 {
-	return s_isInitialized;
+	EntityOutputData data;
+	strcopy(data.classname, sizeof(data.classname), classname);
+	strcopy(data.output, sizeof(data.output), output);
+	data.callback = callback;
+	
+	s_entityOutputs.PushArray(data);
 }
 
-/**
- * Returns whether the plugin is currently enabled.
- *
- * @return		True if enabled, false otherwise.
- * @error		Plugin manager not initialized.
+/*
+ * TODO
  */
-stock bool PM_IsEnabled()
+stock void PM_AddCommandListener(CommandListener callback, const char[] command)
 {
-	return s_isEnabled;
+	CommandListenerData data;
+	strcopy(data.command, sizeof(data.command), command);
+	data.callback = callback;
+	
+	s_commandListeners.PushArray(data);
 }
 
 //*******************************************************************************************************************************************************
@@ -768,4 +830,20 @@ static void OnRelatedConVarChanged(ConVar convar, const char[] oldValue, const c
 		actualConVar.SetString(newValue);
 		actualConVar.AddChangeHook(OnConVarChanged);
 	}
+}
+
+static void TooggleEntityOutputHook(EntityOutputData data, bool enable)
+{
+	if (enable)
+		HookEntityOutput(data.classname, data.output, data.callback);
+	else
+		UnhookEntityOutput(data.classname, data.output, data.callback);
+}
+
+static void ToggleCommandListener(CommandListenerData data, bool enable)
+{
+	if (enable)
+		AddCommandListener(data.callback, data.command);
+	else
+		RemoveCommandListener(data.callback, data.command);
 }
