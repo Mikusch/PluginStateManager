@@ -479,7 +479,7 @@ stock void PM_RemoveDynamicHook(const char[] name)
  * @return				A hookid on success, INVALID_HOOK_ID otherwise.
  * @error				Plugin manager not initialized.
  */
-stock int PM_DynamicHookByName(const char[] name, HookMode mode, int entity, DHookCallback callback)
+stock int PM_DynamicHookEntityByName(const char[] name, HookMode mode, int entity, DHookCallback callback)
 {
 	ThrowIfNotInitialized();
 	
@@ -523,6 +523,31 @@ stock int PM_DynamicHookEntity(DynamicHook hook, HookMode mode, int entity, DHoo
 	}
 	
 	return hookid;
+}
+
+/**
+ * Finds a dynamic hook by name and hooks the gamerules object.
+ * This function does nothing if the plugin is not currently enabled.
+ *
+ * @param name			The name of the registered dynamic hook.
+ * @param mode			The desired hook mode - pre or post. 
+ * @param callback		Callback function.
+ * @return				A hookid on success, INVALID_HOOK_ID otherwise.
+ * @error				Plugin manager not initialized.
+ */
+stock int PM_DynamicHookGameRulesByName(const char[] name, HookMode mode, DHookCallback callback)
+{
+	ThrowIfNotInitialized();
+	
+	if (!PM_IsEnabled())
+		return INVALID_HOOK_ID;
+	
+	int index = s_dynamicHooks.FindString(name, DHookData::name);
+	if (index == -1)
+		ThrowError("Failed to find dynamic hook '%s'", name);
+	
+	DynamicHook hook = s_dynamicHooks.Get(index, DHookData::hook);
+	return PM_DynamicHookGameRules(hook, mode, callback);
 }
 
 /**
