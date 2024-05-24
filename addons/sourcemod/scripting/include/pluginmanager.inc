@@ -200,7 +200,7 @@ stock void PM_SetPluginState(bool enable)
 		EntityOutputData data;
 		if (s_entityOutputs.GetArray(i, data))
 		{
-			TooggleEntityOutputHook(data, enable);
+			ToggleEntityOutputHook(data, enable);
 		}
 	}
 	
@@ -871,7 +871,7 @@ static void OnRelatedConVarChanged(ConVar convar, const char[] oldValue, const c
 	}
 }
 
-static void TooggleEntityOutputHook(EntityOutputData data, bool enable)
+static void ToggleEntityOutputHook(EntityOutputData data, bool enable)
 {
 	if (enable)
 		HookEntityOutput(data.classname, data.output, data.callback);
