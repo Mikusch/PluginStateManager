@@ -1,22 +1,22 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#include <pluginmanager>
+#include <pluginstatemanager>
 
 static DynamicHook g_hookSetModel;
 
 public void OnPluginStart()
 {
-	GameData gamedata = new GameData("pluginmanager_test");
+	GameData gamedata = new GameData("pluginstatemanager_test");
 	
 	// Initialize the plugin state manager system.
-	// The passed convar name will be used as the trigger to enable/disable the plugin. It does not have to exist yet at this point.
-	// If the plugin does not create 
+	// The passed convar name will be used as the trigger to enable/disable the plugin. If the plugin does not create it, one will be created automatically.
 	// The passed gamedata handle will be used in certain functions (check documentation).
-	PSM_Init("sm_pluginmanager_test_enabled", gamedata);
+	PSM_Init("sm_pluginstatemanager_enabled", gamedata);
 	delete gamedata;
 	
-	CreateConVar("sm_pluginmanager_test_enabled", "1", "Enable the plugin?");
+	CreateConVar("sm_pluginstatemanager_enabled", "1", "Enable the plugin?");
+	CreateConVar("sm_pluginstatemanager_waitingforplayers_time", "60", "This convar will be kept in sync with mp_waitingforplayers_time.");
 	
 	// Specify a callback to fire whenever the plugin is enabled or disabled.
 	PSM_AddPluginStateChangedHook(OnPluginStateChanged);
@@ -30,6 +30,7 @@ public void OnPluginStart()
 	g_hookSetModel = PSM_AddDynamicHookFromConf("CBaseEntity::SetModel");
 	
 	PSM_AddEnforcedConVar("tf_forced_holiday", "2");
+	PSM_AddSyncedConVar("sm_pluginstatemanager_waitingforplayers_time", "mp_waitingforplayers_time");
 }
 
 public void OnConfigsExecuted()

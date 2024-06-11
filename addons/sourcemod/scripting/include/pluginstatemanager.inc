@@ -45,7 +45,7 @@ enum struct ConVarData
 	char name[64];
 	char value[64];
 	char initialValue[64];
-	ConVar relatedConVar;
+	ConVar sourceConVar;
 }
 
 enum struct EntityOutputData
@@ -63,7 +63,8 @@ enum struct CommandListenerData
 
 static bool s_isInitialized;
 static bool s_isEnabled;
-static ConVar s_stateConvar;
+static char s_conVarName[64];
+static ConVar s_stateConVar;
 static GameData s_gamedata;
 static PrivateForward s_toggledFwd;
 
@@ -82,17 +83,20 @@ static ArrayList s_commandListeners; // ArrayList<CommandListenerData>
 
 /**
  * Initializes the plugin state manager.
- * This function should be called in the OnPluginStart forward.
  *
- * @param convar		The convar used to determine whether the plugin should be enabled.
- * @param gamedata		Optional gamedata handle.
+ * This function should be called in the 'OnPluginStart' forward.
+ *
+ * @param convarName		The name of the convar used to determine whether the plugin should be enabled.
+ * 							If the calling plugin does not create this convar, one will be automatically created.
+ * @param gamedata			Optional gamedata handle.
  */
 stock void PSM_Init(const char[] convarName, GameData gamedata = null)
 {
 	if (s_isInitialized)
 		return;
 	
-	strcopy(s_convarName, sizeof(s_convarName), convarName);
+	strcopy(s_conVarName, sizeof(s_conVarName), convarName);
+	RequestFrame(InitializeConVar);
 	
 	if (gamedata)
 		s_gamedata = view_as<GameData>(CloneHandle(gamedata));
@@ -111,8 +115,9 @@ stock void PSM_Init(const char[] convarName, GameData gamedata = null)
 }
 
 /**
- * Convenience function that disables the plugin if it is enabled. Useful to clean up anything set by the plugin state manager on plugin end.
- * This function should be called in the OnPluginEnd forward.
+ * Convenience function that disables the plugin if it is enabled.
+ *
+ * This function should be called in the 'OnPluginEnd' forward.
  *
  * @error Plugin state manager not initialized.
  */
@@ -126,7 +131,8 @@ stock void PSM_Disable()
 
 /**
  * Convenience function that toggles the enabled state of the plugin if it isn't in that state already.
- * This function should be called in the OnConfigsExecuted forward.
+ *
+ * This function should be called in the 'OnConfigsExecuted' forward.
  *
  * @error Plugin state manager not initialized.
  */
@@ -134,21 +140,18 @@ stock void PSM_TogglePluginState()
 {
 	ThrowIfNotInitialized();
 	
-	if (!s_stateConvar)
-	{
-		s_stateConvar = FindConVar(s_convarName);
-		s_stateConvar.AddChangeHook(OnEnableConVarChanged);
-	}
+	InitializeConVar();
 	
-	if (PSM_IsEnabled() != s_stateConvar.BoolValue)
+	if (PSM_IsEnabled() != s_stateConVar.BoolValue)
 	{
-		PSM_SetPluginState(s_stateConvar.BoolValue);
+		PSM_SetPluginState(s_stateConVar.BoolValue);
 	}
 }
 
 /**
  * Sets the enabled state of the plugin.
- * Most plugins should use PSM_TogglePluginState to respect the convar.
+ *
+ * Most plugins want to use 'PSM_TogglePluginState' to respect the convar.
  *
  * @param enable		If true, the plugin will be enabled. If false, the plugin will be disabled.
  * @error				Plugin state manager not initialized.
@@ -671,23 +674,29 @@ stock void PSM_AddEnforcedConVar(const char[] name, const char[] value)
 /**
  * Registers a "synced" convar, meaning that its value will always be kept in sync with another convar.
  *
- * @param name		The name of the convar.
- * @param value		The value to enforce.
- * @error			Invalid convar name or plugin state manager not initialized.
+ * @param targetName		The name of the convar to keep in sync.
+ * @param relatedName		The name of the source convar.
+ * @error					Invalid convar name or plugin state manager not initialized.
  */
-stock void PSM_AddSyncedConVar(const char[] name, ConVar relatedConVar)
+stock void PSM_AddSyncedConVar(const char[] targetName, const char[] sourceName)
 {
 	ThrowIfNotInitialized();
 	
-	ConVar convar = FindConVar(name);
+	ConVar convar = FindConVar(targetName);
 	if (!convar)
 	{
-		ThrowError("Failed to find convar '%s'", name);
+		ThrowError("Failed to find convar '%s'", targetName);
+	}
+	
+	ConVar sourceConVar = FindConVar(sourceName);
+	if (!sourceConVar)
+	{
+		ThrowError("Failed to find convar '%s'", sourceName);
 	}
 	
 	ConVarData data;
-	strcopy(data.name, sizeof(data.name), name);
-	data.relatedConVar = relatedConVar;
+	strcopy(data.name, sizeof(data.name), targetName);
+	data.sourceConVar = sourceConVar;
 	
 	s_convars.PushArray(data);
 }
@@ -746,6 +755,21 @@ static void ThrowIfNotInitialized(bool requireGameData = false)
 	}
 }
 
+static void InitializeConVar()
+{
+	if (!s_stateConVar)
+	{
+		s_stateConVar = FindConVar(s_conVarName);
+		if (!s_stateConVar)
+		{
+			s_stateConVar = CreateConVar(s_conVarName, "Enable the plugin?", "1");
+			LogMessage("ConVar '%s' has been automatically created.", s_conVarName);
+		}
+		
+		s_stateConVar.AddChangeHook(OnEnableConVarChanged);
+	}
+}
+
 static void OnEnableConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
 	PSM_TogglePluginState();
@@ -801,13 +825,13 @@ static void ToggleConVar(int index, bool enable)
 		convar.GetString(data.initialValue, sizeof(data.initialValue));
 		
 		// Copy the value from the setting convar if it isn't set
-		if (!data.value[0] && data.relatedConVar)
+		if (!data.value[0] && data.sourceConVar)
 		{
 			char value[64];
-			data.relatedConVar.GetString(value, sizeof(value));
+			data.sourceConVar.GetString(value, sizeof(value));
 			strcopy(data.value, sizeof(data.value), value);
 			
-			data.relatedConVar.AddChangeHook(OnRelatedConVarChanged);
+			data.sourceConVar.AddChangeHook(OnSourceConVarChanged);
 		}
 		
 		s_convars.SetArray(index, data);
@@ -822,11 +846,11 @@ static void ToggleConVar(int index, bool enable)
 		convar.RemoveChangeHook(OnConVarChanged);
 		convar.SetString(data.initialValue);
 		
-		if (data.relatedConVar)
+		if (data.sourceConVar)
 		{
 			PrintToServer("test");
 			data.value[0] = EOS;
-			data.relatedConVar.RemoveChangeHook(OnRelatedConVarChanged);
+			data.sourceConVar.RemoveChangeHook(OnSourceConVarChanged);
 			
 			s_convars.SetArray(index, data);
 		}
@@ -857,9 +881,9 @@ static void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] n
 	}
 }
 
-static void OnRelatedConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
+static void OnSourceConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
-	int index = s_convars.FindValue(convar, ConVarData::relatedConVar);
+	int index = s_convars.FindValue(convar, ConVarData::sourceConVar);
 	if (index == -1)
 		return;
 	
