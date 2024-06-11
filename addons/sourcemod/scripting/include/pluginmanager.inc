@@ -81,19 +81,18 @@ static ArrayList s_commandListeners; // ArrayList<CommandListenerData>
 //=============================================================================
 
 /**
- * Initializes the plugin manager.
+ * Initializes the plugin state manager.
  * This function should be called in the OnPluginStart forward.
  *
  * @param convar		The convar used to determine whether the plugin should be enabled.
  * @param gamedata		Optional gamedata handle.
  */
-stock void PM_Init(ConVar convar, GameData gamedata = null)
+stock void PSM_Init(const char[] convarName, GameData gamedata = null)
 {
 	if (s_isInitialized)
 		return;
 	
-	s_stateConvar = convar;
-	s_stateConvar.AddChangeHook(OnEnableConVarChanged);
+	strcopy(s_convarName, sizeof(s_convarName), convarName);
 	
 	if (gamedata)
 		s_gamedata = view_as<GameData>(CloneHandle(gamedata));
@@ -112,47 +111,53 @@ stock void PM_Init(ConVar convar, GameData gamedata = null)
 }
 
 /**
- * Convenience function that disables the plugin if it is enabled. Useful to clean up anything set by the plugin manager on plugin end.
+ * Convenience function that disables the plugin if it is enabled. Useful to clean up anything set by the plugin state manager on plugin end.
  * This function should be called in the OnPluginEnd forward.
  *
- * @error Plugin manager not initialized.
+ * @error Plugin state manager not initialized.
  */
-stock void PM_Cleanup()
+stock void PSM_Disable()
 {
 	ThrowIfNotInitialized();
 	
-	if (PM_IsEnabled())
-		PM_SetPluginState(false);
+	if (PSM_IsEnabled())
+		PSM_SetPluginState(false);
 }
 
 /**
  * Convenience function that toggles the enabled state of the plugin if it isn't in that state already.
  * This function should be called in the OnConfigsExecuted forward.
  *
- * @error Plugin manager not initialized.
+ * @error Plugin state manager not initialized.
  */
-stock void PM_TogglePluginStateIfNeeded()
+stock void PSM_TogglePluginState()
 {
 	ThrowIfNotInitialized();
 	
-	if (PM_IsEnabled() != s_stateConvar.BoolValue)
+	if (!s_stateConvar)
 	{
-		PM_SetPluginState(s_stateConvar.BoolValue);
+		s_stateConvar = FindConVar(s_convarName);
+		s_stateConvar.AddChangeHook(OnEnableConVarChanged);
+	}
+	
+	if (PSM_IsEnabled() != s_stateConvar.BoolValue)
+	{
+		PSM_SetPluginState(s_stateConvar.BoolValue);
 	}
 }
 
 /**
  * Sets the enabled state of the plugin.
- * Most plugins should use PM_TogglePluginStateIfNeeded to respect the convar.
+ * Most plugins should use PSM_TogglePluginState to respect the convar.
  *
  * @param enable		If true, the plugin will be enabled. If false, the plugin will be disabled.
- * @error				Plugin manager not initialized.
+ * @error				Plugin state manager not initialized.
  */
-stock void PM_SetPluginState(bool enable)
+stock void PSM_SetPluginState(bool enable)
 {
 	ThrowIfNotInitialized();
 	
-	if (PM_IsEnabled() == enable)
+	if (PSM_IsEnabled() == enable)
 		return;
 	
 	s_isEnabled = enable;
@@ -190,7 +195,7 @@ stock void PM_SetPluginState(bool enable)
 		int entity = -1;
 		while ((entity = FindEntityByClassname(entity, "*")) != -1)
 		{
-			PM_SDKUnhook(entity);
+			PSM_SDKUnhook(entity);
 		}
 	}
 	
@@ -229,9 +234,9 @@ stock void PM_SetPluginState(bool enable)
  *
  * @param func		A PluginStateChangedCallback function pointer.
  * @return			True on success, false otherwise.
- * @error			Plugin manager not initialized.
+ * @error			Plugin state manager not initialized.
  */
-stock bool PM_AddPluginStateChangedHook(PluginStateChangedCallback func)
+stock bool PSM_AddPluginStateChangedHook(PluginStateChangedCallback func)
 {
 	ThrowIfNotInitialized();
 	
@@ -242,9 +247,9 @@ stock bool PM_AddPluginStateChangedHook(PluginStateChangedCallback func)
  * Returns whether the Plugin Manager is initialized.
  *
  * @return		True if initialized, false otherwise.
- * @error		Plugin manager not initialized.
+ * @error		Plugin state manager not initialized.
  */
-stock bool PM_IsInitialized()
+stock bool PSM_IsInitialized()
 {
 	return s_isInitialized;
 }
@@ -253,9 +258,9 @@ stock bool PM_IsInitialized()
  * Returns whether the plugin is currently enabled.
  *
  * @return		True if enabled, false otherwise.
- * @error		Plugin manager not initialized.
+ * @error		Plugin state manager not initialized.
  */
-stock bool PM_IsEnabled()
+stock bool PSM_IsEnabled()
 {
 	return s_isEnabled;
 }
@@ -270,9 +275,9 @@ stock bool PM_IsEnabled()
  * @param name			Name of event.
  * @param callback		An EventHook function pointer.
  * @param mode			Optional EventHookMode determining the type of hook.
- * @error				Invalid event name or plugin manager not initialized.
+ * @error				Invalid event name or plugin state manager not initialized.
  */
-stock void PM_AddEventHook(const char[] name, EventHook callback, EventHookMode mode = EventHookMode_Post)
+stock void PSM_AddEventHook(const char[] name, EventHook callback, EventHookMode mode = EventHookMode_Post)
 {
 	ThrowIfNotInitialized();
 	
@@ -300,9 +305,9 @@ stock void PM_AddEventHook(const char[] name, EventHook callback, EventHookMode 
  * @param name			Name of event.
  * @param callback		An EventHook function pointer.
  * @param mode			Optional EventHookMode determining the type of hook.
- * @error				Plugin manager not initialized.
+ * @error				Plugin state manager not initialized.
  */
-stock void PM_RemoveEventHook(const char[] name, EventHook callback, EventHookMode mode = EventHookMode_Post)
+stock void PSM_RemoveEventHook(const char[] name, EventHook callback, EventHookMode mode = EventHookMode_Post)
 {
 	ThrowIfNotInitialized();
 	
@@ -311,7 +316,7 @@ stock void PM_RemoveEventHook(const char[] name, EventHook callback, EventHookMo
 		EventData data;
 		if (s_events.GetArray(i, data) && StrEqual(name, data.name) && callback == data.callback && mode == data.mode)
 		{
-			if (PM_IsEnabled())
+			if (PSM_IsEnabled())
 				ToggleEvent(data, false);
 			
 			s_events.Erase(i);
@@ -329,16 +334,16 @@ stock void PM_RemoveEventHook(const char[] name, EventHook callback, EventHookMo
  * @param name				Name of the function in a "Functions" section to load.
  * @param callbackPre		Optional pre callback function.
  * @param callbackPost		Optional post callback function.
- * @error					Invalid gamedata, plugin manager not initialized or GameData handle not initialized.
+ * @error					Invalid gamedata, plugin state manager not initialized or GameData handle not initialized.
  */
-stock DynamicDetour PM_AddDynamicDetourFromConf(const char[] name, DHookCallback callbackPre = INVALID_FUNCTION, DHookCallback callbackPost = INVALID_FUNCTION)
+stock DynamicDetour PSM_AddDynamicDetourFromConf(const char[] name, DHookCallback callbackPre = INVALID_FUNCTION, DHookCallback callbackPost = INVALID_FUNCTION)
 {
 	ThrowIfNotInitialized(true);
 	
 	DynamicDetour detour = DynamicDetour.FromConf(s_gamedata, name);
 	if (detour)
 	{
-		PM_AddDynamicDetour(name, detour, callbackPre, callbackPost);
+		PSM_AddDynamicDetour(name, detour, callbackPre, callbackPost);
 		return detour;
 	}
 	else
@@ -355,9 +360,9 @@ stock DynamicDetour PM_AddDynamicDetourFromConf(const char[] name, DHookCallback
  * @param detour			The DynamicDetour object.
  * @param callbackPre		Optional pre callback function.
  * @param callbackPost		Optional post callback function.
- * @error					Plugin manager not initialized.
+ * @error					Plugin state manager not initialized.
  */
-stock void PM_AddDynamicDetour(const char[] name, DynamicDetour detour, DHookCallback callbackPre = INVALID_FUNCTION, DHookCallback callbackPost = INVALID_FUNCTION)
+stock void PSM_AddDynamicDetour(const char[] name, DynamicDetour detour, DHookCallback callbackPre = INVALID_FUNCTION, DHookCallback callbackPost = INVALID_FUNCTION)
 {
 	ThrowIfNotInitialized(true);
 	
@@ -376,9 +381,9 @@ stock void PM_AddDynamicDetour(const char[] name, DynamicDetour detour, DHookCal
  * @param name				The name of the registered dynamic detour.
  * @param callbackPre		Optional pre callback function.
  * @param callbackPost		Optional post callback function.
- * @error					Plugin manager not initialized.
+ * @error					Plugin state manager not initialized.
  */
-stock void PM_RemoveDynamicDetour(const char[] name, DHookCallback callbackPre = INVALID_FUNCTION, DHookCallback callbackPost = INVALID_FUNCTION)
+stock void PSM_RemoveDynamicDetour(const char[] name, DHookCallback callbackPre = INVALID_FUNCTION, DHookCallback callbackPost = INVALID_FUNCTION)
 {
 	ThrowIfNotInitialized();
 	
@@ -387,7 +392,7 @@ stock void PM_RemoveDynamicDetour(const char[] name, DHookCallback callbackPre =
 		DetourData data;
 		if (s_detours.GetArray(i, data) && StrEqual(name, data.name) && callbackPre == data.callbackPre && callbackPost == data.callbackPost)
 		{
-			if (PM_IsEnabled())
+			if (PSM_IsEnabled())
 				ToggleDetour(data, false);
 			
 			s_detours.Erase(i);
@@ -404,16 +409,16 @@ stock void PM_RemoveDynamicDetour(const char[] name, DHookCallback callbackPre =
  *
  * @param name		Name of the function in a "Functions" section to load.
  * @return			The DynamicHook on success, null otherwise.
- * @error			Invalid gamedata, plugin manager not initialized or GameData handle not initialized.
+ * @error			Invalid gamedata, plugin state manager not initialized or GameData handle not initialized.
  */
-stock DynamicHook PM_AddDynamicHookFromConf(const char[] name)
+stock DynamicHook PSM_AddDynamicHookFromConf(const char[] name)
 {
 	ThrowIfNotInitialized(true);
 	
 	DynamicHook hook = DynamicHook.FromConf(s_gamedata, name);
 	if (hook)
 	{
-		PM_AddDynamicHook(name, hook);
+		PSM_AddDynamicHook(name, hook);
 		return hook;
 	}
 	else
@@ -428,9 +433,9 @@ stock DynamicHook PM_AddDynamicHookFromConf(const char[] name)
  *
  * @param name			Name to register the dynamic hook as.
  * @param detour		The DynamicHook object.
- * @error				Plugin manager not initialized.
+ * @error				Plugin state manager not initialized.
  */
-stock void PM_AddDynamicHook(const char[] name, DynamicHook hook)
+stock void PSM_AddDynamicHook(const char[] name, DynamicHook hook)
 {
 	ThrowIfNotInitialized(true);
 	
@@ -445,9 +450,9 @@ stock void PM_AddDynamicHook(const char[] name, DynamicHook hook)
  * Unregisters a dynamic hook.
  *
  * @param name		The name of the registered dynamic hook.
- * @error			Plugin manager not initialized.
+ * @error			Plugin state manager not initialized.
  */
-stock void PM_RemoveDynamicHook(const char[] name)
+stock void PSM_RemoveDynamicHook(const char[] name)
 {
 	ThrowIfNotInitialized();
 	
@@ -477,13 +482,13 @@ stock void PM_RemoveDynamicHook(const char[] name)
  * @param entity		Entity index to hook on.
  * @param callback		Callback function.
  * @return				A hookid on success, INVALID_HOOK_ID otherwise.
- * @error				Plugin manager not initialized.
+ * @error				Plugin state manager not initialized.
  */
-stock int PM_DynamicHookEntityByName(const char[] name, HookMode mode, int entity, DHookCallback callback)
+stock int PSM_DynamicHookEntityByName(const char[] name, HookMode mode, int entity, DHookCallback callback)
 {
 	ThrowIfNotInitialized();
 	
-	if (!PM_IsEnabled())
+	if (!PSM_IsEnabled())
 		return INVALID_HOOK_ID;
 	
 	int index = s_dynamicHooks.FindString(name, DHookData::name);
@@ -491,7 +496,7 @@ stock int PM_DynamicHookEntityByName(const char[] name, HookMode mode, int entit
 		ThrowError("Failed to find dynamic hook '%s'", name);
 	
 	DynamicHook hook = s_dynamicHooks.Get(index, DHookData::hook);
-	return PM_DynamicHookEntity(hook, mode, entity, callback);
+	return PSM_DynamicHookEntity(hook, mode, entity, callback);
 }
 
 /**
@@ -503,13 +508,13 @@ stock int PM_DynamicHookEntityByName(const char[] name, HookMode mode, int entit
  * @param entity		Entity index to hook on.
  * @param callback		Callback function.
  * @return				A hookid on success, INVALID_HOOK_ID otherwise.
- * @error				Plugin manager not initialized.
+ * @error				Plugin state manager not initialized.
  */
-stock int PM_DynamicHookEntity(DynamicHook hook, HookMode mode, int entity, DHookCallback callback)
+stock int PSM_DynamicHookEntity(DynamicHook hook, HookMode mode, int entity, DHookCallback callback)
 {
 	ThrowIfNotInitialized();
 	
-	if (!PM_IsEnabled())
+	if (!PSM_IsEnabled())
 		return INVALID_HOOK_ID;
 	
 	int hookid = hook.HookEntity(Hook_Pre, entity, callback, OnDynamicHookRemoved);
@@ -533,13 +538,13 @@ stock int PM_DynamicHookEntity(DynamicHook hook, HookMode mode, int entity, DHoo
  * @param mode			The desired hook mode - pre or post. 
  * @param callback		Callback function.
  * @return				A hookid on success, INVALID_HOOK_ID otherwise.
- * @error				Plugin manager not initialized.
+ * @error				Plugin state manager not initialized.
  */
-stock int PM_DynamicHookGameRulesByName(const char[] name, HookMode mode, DHookCallback callback)
+stock int PSM_DynamicHookGameRulesByName(const char[] name, HookMode mode, DHookCallback callback)
 {
 	ThrowIfNotInitialized();
 	
-	if (!PM_IsEnabled())
+	if (!PSM_IsEnabled())
 		return INVALID_HOOK_ID;
 	
 	int index = s_dynamicHooks.FindString(name, DHookData::name);
@@ -547,7 +552,7 @@ stock int PM_DynamicHookGameRulesByName(const char[] name, HookMode mode, DHookC
 		ThrowError("Failed to find dynamic hook '%s'", name);
 	
 	DynamicHook hook = s_dynamicHooks.Get(index, DHookData::hook);
-	return PM_DynamicHookGameRules(hook, mode, callback);
+	return PSM_DynamicHookGameRules(hook, mode, callback);
 }
 
 /**
@@ -558,13 +563,13 @@ stock int PM_DynamicHookGameRulesByName(const char[] name, HookMode mode, DHookC
  * @param mode			The desired hook mode - pre or post. 
  * @param callback		Callback function.
  * @return				A hookid on success, INVALID_HOOK_ID otherwise.
- * @error				Plugin manager not initialized.
+ * @error				Plugin state manager not initialized.
  */
-stock int PM_DynamicHookGameRules(DynamicHook hook, HookMode mode, DHookCallback callback)
+stock int PSM_DynamicHookGameRules(DynamicHook hook, HookMode mode, DHookCallback callback)
 {
 	ThrowIfNotInitialized();
 	
-	if (!PM_IsEnabled())
+	if (!PSM_IsEnabled())
 		return INVALID_HOOK_ID;
 	
 	int hookid = hook.HookGamerules(mode, callback, OnDynamicHookRemoved);
@@ -592,13 +597,13 @@ stock int PM_DynamicHookGameRules(DynamicHook hook, HookMode mode, DHookCallback
  * @param type			Type of function to hook.
  * @param callback		Function to call when hook is called.
  * @return				True on success, false otherwise.
- * @error				Plugin manager not initialized.
+ * @error				Plugin state manager not initialized.
  */
-stock bool PM_SDKHook(int entity, SDKHookType type, SDKHookCB callback)
+stock bool PSM_SDKHook(int entity, SDKHookType type, SDKHookCB callback)
 {
 	ThrowIfNotInitialized();
 	
-	if (!PM_IsEnabled())
+	if (!PSM_IsEnabled())
 		return false;
 	
 	SDKHookData data;
@@ -616,9 +621,9 @@ stock bool PM_SDKHook(int entity, SDKHookType type, SDKHookCB callback)
  * Unhooks an entity.
  *
  * @param entity		Entity index.
- * @error				Plugin manager not initialized.
+ * @error				Plugin state manager not initialized.
  */
-stock void PM_SDKUnhook(int entity)
+stock void PSM_SDKUnhook(int entity)
 {
 	ThrowIfNotInitialized();
 	
@@ -644,9 +649,9 @@ stock void PM_SDKUnhook(int entity)
  *
  * @param name		The name of the convar.
  * @param value		The value to enforce.
- * @error			Invalid convar name or plugin manager not initialized.
+ * @error			Invalid convar name or plugin state manager not initialized.
  */
-stock void PM_AddEnforcedConVar(const char[] name, const char[] value)
+stock void PSM_AddEnforcedConVar(const char[] name, const char[] value)
 {
 	ThrowIfNotInitialized();
 	
@@ -668,9 +673,9 @@ stock void PM_AddEnforcedConVar(const char[] name, const char[] value)
  *
  * @param name		The name of the convar.
  * @param value		The value to enforce.
- * @error			Invalid convar name or plugin manager not initialized.
+ * @error			Invalid convar name or plugin state manager not initialized.
  */
-stock void PM_AddSyncedConVar(const char[] name, ConVar relatedConVar)
+stock void PSM_AddSyncedConVar(const char[] name, ConVar relatedConVar)
 {
 	ThrowIfNotInitialized();
 	
@@ -693,9 +698,9 @@ stock void PM_AddSyncedConVar(const char[] name, ConVar relatedConVar)
  * @param classname		The classname to hook.
  * @param output		The output name to hook.
  * @param callback		An EntityOutput function pointer.
- * @error				Plugin manager not initialized.
+ * @error				Plugin state manager not initialized.
  */
-stock void PM_AddEntityOutputHook(const char[] classname, const char[] output, EntityOutput callback)
+stock void PSM_AddEntityOutputHook(const char[] classname, const char[] output, EntityOutput callback)
 {
 	ThrowIfNotInitialized();
 	
@@ -713,9 +718,9 @@ stock void PM_AddEntityOutputHook(const char[] classname, const char[] output, E
  * @param callback		A CommandListener function pointer.
  * @param command		Command, or if not specified, a global listener.
  * 						The command is case insensitive.
- * @error				Plugin manager not initialized.
+ * @error				Plugin state manager not initialized.
  */
-stock void PM_AddCommandListener(CommandListener callback, const char[] command)
+stock void PSM_AddCommandListener(CommandListener callback, const char[] command)
 {
 	ThrowIfNotInitialized();
 	
@@ -730,20 +735,20 @@ stock void PM_AddCommandListener(CommandListener callback, const char[] command)
 
 static void ThrowIfNotInitialized(bool requireGameData = false)
 {
-	if (!PM_IsInitialized())
+	if (!PSM_IsInitialized())
 	{
-		ThrowError("The plugin manager is not initialized! Call 'PM_Init' to use this function!");
+		ThrowError("The plugin state manager is not initialized! Call 'PSM_Init' to use this function!");
 	}
 	
 	if (requireGameData && !s_gamedata)
 	{
-		ThrowError("GameData handle is not initialized! Pass a valid GameData handle to 'PM_Init' to use this function!");
+		ThrowError("GameData handle is not initialized! Pass a valid GameData handle to 'PSM_Init' to use this function!");
 	}
 }
 
 static void OnEnableConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
-	PM_TogglePluginStateIfNeeded();
+	PSM_TogglePluginState();
 }
 
 static void OnDynamicHookRemoved(int hookid)
