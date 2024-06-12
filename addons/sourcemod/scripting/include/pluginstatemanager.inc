@@ -435,7 +435,7 @@ stock DynamicHook PSM_AddDynamicHookFromConf(const char[] name)
  * Registers a dynamic hook.
  *
  * @param name			Name to register the dynamic hook as.
- * @param detour		The DynamicHook object.
+ * @param hook			The DynamicHook object.
  * @error				Plugin state manager not initialized.
  */
 stock void PSM_AddDynamicHook(const char[] name, DynamicHook hook)
@@ -478,6 +478,7 @@ stock void PSM_RemoveDynamicHook(const char[] name)
 
 /**
  * Finds a dynamic hook by name and hooks an entity.
+ *
  * This function does nothing if the plugin is not currently enabled.
  *
  * @param name			The name of the registered dynamic hook.
@@ -504,6 +505,7 @@ stock int PSM_DynamicHookEntityByName(const char[] name, HookMode mode, int enti
 
 /**
  * Hooks an entity.
+ *
  * This function does nothing if the plugin is not currently enabled.
  *
  * @param hook			The DynamicHook handle.
@@ -535,6 +537,7 @@ stock int PSM_DynamicHookEntity(DynamicHook hook, HookMode mode, int entity, DHo
 
 /**
  * Finds a dynamic hook by name and hooks the gamerules object.
+ *
  * This function does nothing if the plugin is not currently enabled.
  *
  * @param name			The name of the registered dynamic hook.
@@ -560,6 +563,7 @@ stock int PSM_DynamicHookGameRulesByName(const char[] name, HookMode mode, DHook
 
 /**
  * Hooks the gamerules object.
+ *
  * This function does nothing if the plugin is not currently enabled.
  *
  * @param hook			The DynamicHook handle.
@@ -594,6 +598,7 @@ stock int PSM_DynamicHookGameRules(DynamicHook hook, HookMode mode, DHookCallbac
 
 /**
  * Hooks an entity.
+ *
  * This function does nothing if the plugin is not currently enabled.
  *
  * @param entity		Entity index.

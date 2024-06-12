@@ -1,8 +1,11 @@
-# Plugin Manager
+# Plugin State Manager
 
-### An include for SourceMod plugins that allows for easy plugin enabling and disabling.
+### An include for SourceMod plugins that aims to reduce boilerplate code for enabling and disabling.
 
-SourceMod developers are all too familiar with this kind of code:
+> [!NOTE]  
+> This include was mostly made for my own personal use, so it may be a bit rough around the edges.
+
+Many plugin developers are familiar with the good old "is enabled" guard clause at the top of every single function:
 
 ```sourcepawn
 void OnGameEvent_player_spawn(Event event, const char[] name, bool dontBroadcast)
@@ -14,44 +17,40 @@ void OnGameEvent_player_spawn(Event event, const char[] name, bool dontBroadcast
 }
 ```
 
-Writing "is enabled" checks into every callback can be a pain, and it's easy to forget to add them. Furthermore, they can be a performance hit if you have a lot of them.
+This approach has several flaws, since it is not only is very annoying to write, but also very easy to forget. Most importantly, it wastes resources since hooks are still called even if the plugin is disabled.
 
-This include aims to make it easier to write plugins that can be enabled and disabled at runtime. It provides a simple API to hook and unhook callbacks, and automatically handles enabling and disabling the plugin.
+I ended up writing a pretty robust system for enabling and disabling plugins, which I've copied into pretty much all my plugins.
+
+## Usage
+
+Certain functions need to be called in SourceMod forwards to properly use this include.
+
+You generally want to call `PSM_Init` in `OnPluginStart`, `PSM_TogglePluginState` in `OnConfigsExecuted`, and `PSM_Disable` in `OnPluginEnd`. For a full example utilizing most of the features, see [here](https://github.com/Mikusch/PluginStateManager/blob/master/addons/sourcemod/scripting/pluginstatemanager_test.sp).
 
 ```sourcepawn
-#include <pluginmanager>
+#include <pluginstatemanager>
 
 public void OnPluginStart()
 {
-	// Have the plugin be managed by the sm_myplugin_enabled convar
-	ConVar convar = CreateConVar("sm_myplugin_enabled", "1", "Enable the plugin?");
-	PluginManager.Init(convar);
+	CreateConVar("sm_myplugin_enabled", "1", "Enable the plugin?");
 	
-	// Register your callbacks
-	PluginManager.AddEventHook("player_spawn", OnGameEvent_player_spawn);
-	PluginManager.AddPluginToggledHook(OnPluginToggled);
+	// Initialize the state manager.
+	PSM_Init("sm_myplugin_enabled");
+	
+	// Add events, detours, etc. to be hooked when the plugin enables.
+	PSM_AddEventHook("player_spawn", OnGameEvent_player_spawn);
+	PSM_AddEnforcedConVar("tf_forced_holiday", "2");
 }
 
 public void OnConfigsExecuted()
 {
-	// Automatically enable or disable the plugin based on the server configuration
-	PluginManager.TogglePluginIfNecessary();
+	// This will enable the plugin if sm_myplugin_enabled is true.
+	PSM_TogglePluginState();
 }
 
-// This callback will unhook itself if the plugin gets disabled via "sm_myplugin_enabled"
-static void OnGameEvent_player_spawn(Event event, const char[] name, bool dontBroadcast)
+public void OnPluginEnd()
 {
-	LogMessage("Player spawned");
-}
-
-static void OnPluginToggled(bool enabled)
-{
-	// Custom logic here
+	// This will disable the plugin and remove any hooks that are still active.
+	PSM_Disable();
 }
 ```
-
-When `sm_myplugin_enabled` is set to `0`, everything you added will be completely unhooked, meaning you don't have to check if the plugin is enabled in each callback. Setting it back to `1` will re-enable everything. Simple, right?
-
-This is **completely standalone** - no need to install any plugins or extensions. Just include the file and you're good to go.
-
-For more examples, check out the [example plugin](https://github.com/Mikusch/pluginmanager/blob/master/addons/sourcemod/scripting/pluginmanager_test.sp).

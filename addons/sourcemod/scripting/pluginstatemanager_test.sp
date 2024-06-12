@@ -31,6 +31,8 @@ public void OnPluginStart()
 	
 	PSM_AddEnforcedConVar("tf_forced_holiday", "2");
 	PSM_AddSyncedConVar("sm_pluginstatemanager_waitingforplayers_time", "mp_waitingforplayers_time");
+	
+	RegConsoleCmd("sm_test", OnTestCommand);
 }
 
 public void OnConfigsExecuted()
@@ -80,6 +82,16 @@ static void OnPluginStateChanged(bool enable)
 			OnEntityCreated(entity, classname);
 		}
 	}
+}
+
+static Action OnTestCommand(int client, int args)
+{
+	// Not every single guard clause can be eliminated, but you can check the current plugin state.
+	if (!PSM_IsEnabled())
+		return Plugin_Continue;
+	
+	LogMessage("Test!");
+	return Plugin_Handled;
 }
 
 static void OnPropSpawned(int beam)
