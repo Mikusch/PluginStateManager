@@ -42,12 +42,13 @@ public void OnPluginStart()
 
 public void OnConfigsExecuted()
 {
-	// This will enable the plugin if the specified convar's value is true.
+	// This will enable the plugin if sm_pluginstatemanager_enabled is true.
 	PSM_TogglePluginState();
 }
 
 public void OnPluginEnd()
 {
+	// This will clean up any hooks that are still active.
 	PSM_Disable();
 }
 
