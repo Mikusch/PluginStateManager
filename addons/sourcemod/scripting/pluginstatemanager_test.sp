@@ -15,10 +15,12 @@ public void OnPluginStart()
 	PSM_Init("sm_pluginstatemanager_enabled", gamedata);
 	delete gamedata;
 	
+	// You can create the convar before or after calling PSM_Init(), as long as it happens in the same frame.
 	CreateConVar("sm_pluginstatemanager_enabled", "1", "Enable the plugin?");
 	CreateConVar("sm_pluginstatemanager_waitingforplayers_time", "60", "This convar will be kept in sync with mp_waitingforplayers_time.");
 	
 	// Specify a callback to fire whenever the plugin is enabled or disabled.
+	// Custom logic for enabling/disabling can go there.
 	PSM_AddPluginStateChangedHook(OnPluginStateChanged);
 	
 	// Add events, detours, etc. to be hooked when the plugin enables.
@@ -29,7 +31,10 @@ public void OnPluginStart()
 	// You can use this handle directly in DynamicHookEntity, or if you don't want to store it, look up the hook by name (see: OnClientPutInServer).
 	g_hookSetModel = PSM_AddDynamicHookFromConf("CBaseEntity::SetModel");
 	
+	// This forces tf_forced_holiday to always be 2 while the plugin is enabled.
 	PSM_AddEnforcedConVar("tf_forced_holiday", "2");
+	
+	// This forces sm_pluginstatemanager_waitingforplayers_time to always keep the same value as mp_waitingforplayers_time.
 	PSM_AddSyncedConVar("sm_pluginstatemanager_waitingforplayers_time", "mp_waitingforplayers_time");
 	
 	RegConsoleCmd("sm_test", OnTestCommand);
@@ -71,7 +76,7 @@ static void OnPluginStateChanged(bool enable)
 	
 	if (enable)
 	{
-		// Re-create our SDKHooks
+		// Re-create our SDKHooks.
 		int entity = -1;
 		while ((entity = FindEntityByClassname(entity, "*")) != -1)
 		{
