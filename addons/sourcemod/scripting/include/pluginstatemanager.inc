@@ -7,7 +7,6 @@
 #define PSM_VERSION		1.0.0
 
 typedef PluginStateChangedCallback = function void(bool enabled);
-typedef PluginIsEnabledCallback = function bool();
 
 enum struct EventData
 {
@@ -71,7 +70,6 @@ static ConVar s_stateConVar;
 static GameData s_gamedata;
 
 static PrivateForward s_stateChangedFwd;
-static PrivateForward s_isEnabledFwd;
 
 static ArrayList s_events; // ArrayList<EventData>
 static ArrayList s_detours; // ArrayList <DetourData>
@@ -107,7 +105,6 @@ stock void PSM_Init(const char[] convarName, GameData gamedata = null)
 		s_gamedata = view_as<GameData>(CloneHandle(gamedata));
 	
 	s_stateChangedFwd = new PrivateForward(ET_Ignore, Param_Cell);
-	s_isEnabledFwd = new PrivateForward(ET_Single);
 	
 	s_events = new ArrayList(sizeof(EventData));
 	s_detours = new ArrayList(sizeof(DetourData));
@@ -257,21 +254,6 @@ stock bool PSM_AddPluginStateChangedHook(PluginStateChangedCallback func)
 }
 
 /**
- * Registers a callback function that is called when checking for the enabled state.
- * This can be used to add additional conditions that determine the plugin state.
- *
- * @param func		A PluginIsEnabledCallback function pointer.
- * @return			True on success, false otherwise.
- * @error			Plugin state manager not initialized.
- */
-stock bool PSM_AddPluginIsEnabledHook(PluginIsEnabledCallback func)
-{
-	ThrowIfNotInitialized();
-	
-	return s_isEnabledFwd.AddFunction(null, func);
-}
-
-/**
  * Returns whether the Plugin Manager is initialized.
  *
  * @return		True if initialized, false otherwise.
@@ -288,15 +270,7 @@ stock bool PSM_IsInitialized()
  */
 stock bool PSM_IsEnabled()
 {
-	if (!PSM_IsInitialized() || !s_isEnabled)
-		return false;
-	
-	if (s_isEnabledFwd.FunctionCount == 0)
-		return true;
-	
-	bool result = true;
-	Call_StartForward(s_isEnabledFwd);
-	return Call_Finish(result) != SP_ERROR_NONE && result;
+	return PSM_IsInitialized() && s_isEnabled;
 }
 
 //=============================================================================
