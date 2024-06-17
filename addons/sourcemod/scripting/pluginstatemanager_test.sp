@@ -49,7 +49,7 @@ public void OnConfigsExecuted()
 public void OnPluginEnd()
 {
 	// This will clean up any hooks that are still active.
-	PSM_Disable();
+	PSM_SetPluginState(false);
 }
 
 public void OnClientPutInServer(int client)

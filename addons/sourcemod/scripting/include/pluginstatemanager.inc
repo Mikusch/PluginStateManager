@@ -177,21 +177,6 @@ stock void PSM_Init(const char[] convarName, GameData gamedata = null)
 }
 
 /**
- * Convenience function that disables the plugin if it is enabled.
- *
- * This function should be called in the 'OnPluginEnd' forward.
- *
- * @error Plugin state manager not initialized.
- */
-stock void PSM_Disable()
-{
-	ThrowIfNotInitialized();
-	
-	if (PSM_IsEnabled())
-		PSM_SetPluginState(false);
-}
-
-/**
  * Convenience function that toggles the enabled state of the plugin if it isn't in that state already.
  *
  * This function should be called in the 'OnConfigsExecuted' forward.
