@@ -51,4 +51,4 @@ public void OnPluginEnd()
 }
 ```
 
-For a more detailed example, see the [example plugin](https://github.com/Mikusch/PluginStateManager/blob/master/addons/sourcemod/scripting/pluginstatemanager_test.sp).
+For a more detailed example, see the [example plugin](https://github.com/Mikusch/PluginStateManager/blob/master/addons/sourcemod/scripting/psm_test.sp).
