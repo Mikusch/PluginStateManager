@@ -68,7 +68,6 @@ static bool s_isEnabled;
 static char s_conVarName[64];
 static ConVar s_stateConVar;
 static GameData s_gamedata;
-
 static PrivateForward s_stateChangedFwd;
 
 static ArrayList s_events; // ArrayList<EventData>
@@ -99,7 +98,7 @@ stock void PSM_Init(const char[] convarName, GameData gamedata = null)
 		return;
 	
 	strcopy(s_conVarName, sizeof(s_conVarName), convarName);
-	RequestFrame(InitializeConVar);
+	RequestFrame(InitializeStateConVar);
 	
 	if (gamedata)
 		s_gamedata = view_as<GameData>(CloneHandle(gamedata));
@@ -144,7 +143,7 @@ stock void PSM_TogglePluginState()
 {
 	ThrowIfNotInitialized();
 	
-	InitializeConVar();
+	InitializeStateConVar();
 	
 	if (PSM_IsEnabled() != s_stateConVar.BoolValue)
 	{
@@ -620,7 +619,7 @@ stock bool PSM_SDKHook(int entity, SDKHookType type, SDKHookCB callback)
 		return false;
 	
 	SDKHookData data;
-	data.ref = IsValidEdict(entity) ? EntIndexToEntRef(entity) : entity;
+	data.ref = EntIndexToEntRefSafe(entity);
 	data.type = type;
 	data.callback = callback;
 	
@@ -640,7 +639,7 @@ stock void PSM_SDKUnhook(int entity)
 {
 	ThrowIfNotInitialized();
 	
-	int ref = IsValidEdict(entity) ? EntIndexToEntRef(entity) : entity;
+	int ref = EntIndexToEntRefSafe(entity);
 	
 	for (int i = s_sdkHooks.Length - 1; i >= 0; i--)
 	{
@@ -711,6 +710,10 @@ stock void PSM_AddSyncedConVar(const char[] targetName, const char[] sourceName)
 	s_convars.PushArray(data);
 }
 
+//=============================================================================
+// Miscellaneous
+//=============================================================================
+
 /**
  * Registers an entity output hook.
  *
@@ -765,7 +768,7 @@ static void ThrowIfNotInitialized(bool requireGameData = false)
 	}
 }
 
-static void InitializeConVar()
+static void InitializeStateConVar()
 {
 	if (!s_stateConVar)
 	{
@@ -790,6 +793,11 @@ static void OnDynamicHookRemoved(int hookid)
 	int index = s_dynamicHookIds.FindValue(hookid, DHookIdData::hookid);
 	if (index != -1)
 		s_dynamicHookIds.Erase(index);
+}
+
+static int EntIndexToEntRefSafe(int entity)
+{
+	return IsValidEdict(entity) ? EntIndexToEntRef(entity) : entity;
 }
 
 static void ToggleDetour(DetourData data, bool enable)
@@ -858,13 +866,28 @@ static void ToggleConVar(int index, bool enable)
 		
 		if (data.sourceConVar)
 		{
-			PrintToServer("test");
-			data.value[0] = EOS;
+			data.value[0] = '\0';
 			data.sourceConVar.RemoveChangeHook(OnSourceConVarChanged);
 			
 			s_convars.SetArray(index, data);
 		}
 	}
+}
+
+static void ToggleEntityOutputHook(EntityOutputData data, bool enable)
+{
+	if (enable)
+		HookEntityOutput(data.classname, data.output, data.callback);
+	else
+		UnhookEntityOutput(data.classname, data.output, data.callback);
+}
+
+static void ToggleCommandListener(CommandListenerData data, bool enable)
+{
+	if (enable)
+		AddCommandListener(data.callback, data.command);
+	else
+		RemoveCommandListener(data.callback, data.command);
 }
 
 static void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
@@ -908,20 +931,4 @@ static void OnSourceConVarChanged(ConVar convar, const char[] oldValue, const ch
 		actualConVar.SetString(newValue);
 		actualConVar.AddChangeHook(OnConVarChanged);
 	}
-}
-
-static void ToggleEntityOutputHook(EntityOutputData data, bool enable)
-{
-	if (enable)
-		HookEntityOutput(data.classname, data.output, data.callback);
-	else
-		UnhookEntityOutput(data.classname, data.output, data.callback);
-}
-
-static void ToggleCommandListener(CommandListenerData data, bool enable)
-{
-	if (enable)
-		AddCommandListener(data.callback, data.command);
-	else
-		RemoveCommandListener(data.callback, data.command);
 }
