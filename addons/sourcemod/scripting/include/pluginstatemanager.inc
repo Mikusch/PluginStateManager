@@ -547,7 +547,7 @@ stock void PSM_RemoveDynamicHook(const char[] name)
  * @return				A hookid on success, INVALID_HOOK_ID otherwise.
  * @error				Plugin state manager not initialized.
  */
-stock int PSM_DynamicHookEntityByName(const char[] name, HookMode mode, int entity, DHookCallback callback)
+stock int PSM_DHookEntityByName(const char[] name, HookMode mode, int entity, DHookCallback callback)
 {
 	ThrowIfNotInitialized();
 	
@@ -559,7 +559,7 @@ stock int PSM_DynamicHookEntityByName(const char[] name, HookMode mode, int enti
 		ThrowError("Failed to find dynamic hook '%s'", name);
 	
 	DynamicHook hook = s_dynamicHooks.Get(index, DHookData::hook);
-	return PSM_DynamicHookEntity(hook, mode, entity, callback);
+	return PSM_DHookEntity(hook, mode, entity, callback);
 }
 
 /**
@@ -574,7 +574,7 @@ stock int PSM_DynamicHookEntityByName(const char[] name, HookMode mode, int enti
  * @return				A hookid on success, INVALID_HOOK_ID otherwise.
  * @error				Plugin state manager not initialized.
  */
-stock int PSM_DynamicHookEntity(DynamicHook hook, HookMode mode, int entity, DHookCallback callback)
+stock int PSM_DHookEntity(DynamicHook hook, HookMode mode, int entity, DHookCallback callback)
 {
 	ThrowIfNotInitialized();
 	
