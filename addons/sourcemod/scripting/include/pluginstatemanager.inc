@@ -527,7 +527,7 @@ stock int PSM_DynamicHookEntity(DynamicHook hook, HookMode mode, int entity, DHo
 	if (!PSM_IsEnabled())
 		return INVALID_HOOK_ID;
 	
-	int hookid = hook.HookEntity(Hook_Pre, entity, callback, OnDynamicHookRemoved);
+	int hookid = hook.HookEntity(mode, entity, callback, OnDynamicHookRemoved);
 	if (hookid != INVALID_HOOK_ID)
 	{
 		DHookIdData data;
