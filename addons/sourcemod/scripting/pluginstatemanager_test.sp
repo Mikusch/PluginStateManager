@@ -36,8 +36,6 @@ public void OnPluginStart()
 	
 	// This forces sm_pluginstatemanager_waitingforplayers_time to always keep the same value as mp_waitingforplayers_time.
 	PSM_AddSyncedConVar("sm_pluginstatemanager_waitingforplayers_time", "mp_waitingforplayers_time");
-	
-	RegConsoleCmd("sm_test", OnTestCommand);
 }
 
 public void OnConfigsExecuted()
@@ -71,6 +69,15 @@ public void OnEntityCreated(int entity, const char[] classname)
 	}
 }
 
+public void OnMapStart()
+{
+	// Certain functions, like forwards, still require the good old guard clause.
+	if (!PSM_IsEnabled())
+		return;
+	
+	LogMessage("The map has started");
+}
+
 static void OnPluginStateChanged(bool enable)
 {
 	LogMessage("Plugin changed state to [%s]", enable ? "enabled" : "disabled");
@@ -90,19 +97,9 @@ static void OnPluginStateChanged(bool enable)
 	}
 }
 
-static Action OnTestCommand(int client, int args)
-{
-	// Not every single guard clause can be eliminated, but you can check the current plugin state.
-	if (!PSM_IsEnabled())
-		return Plugin_Continue;
-	
-	LogMessage("Test!");
-	return Plugin_Handled;
-}
-
 static void OnPropSpawned(int beam)
 {
-	LogMessage("prop_dynamic (%d) spawned!", beam);
+	LogMessage("prop_dynamic (%d) spawned", beam);
 }
 
 static void OnGameEvent_player_spawn(Event event, const char[] name, bool dontBroadcast)
