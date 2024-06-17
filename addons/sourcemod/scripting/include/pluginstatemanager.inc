@@ -13,6 +13,14 @@ enum struct EventData
 	char name[32];
 	EventHook callback;
 	EventHookMode mode;
+	
+	void Toggle(bool enable)
+	{
+		if (enable)
+			HookEvent(this.name, this.callback, this.mode);
+		else
+			UnhookEvent(this.name, this.callback, this.mode);
+	}
 }
 
 enum struct DetourData
@@ -21,6 +29,25 @@ enum struct DetourData
 	DynamicDetour detour;
 	DHookCallback callbackPre;
 	DHookCallback callbackPost;
+	
+	void Toggle(bool enable)
+	{
+		if (this.callbackPre != INVALID_FUNCTION)
+		{
+			if (enable)
+				this.detour.Enable(Hook_Pre, this.callbackPre);
+			else
+				this.detour.Disable(Hook_Pre, this.callbackPre);
+		}
+		
+		if (this.callbackPost != INVALID_FUNCTION)
+		{
+			if (enable)
+				this.detour.Enable(Hook_Post, this.callbackPost);
+			else
+				this.detour.Disable(Hook_Post, this.callbackPost);
+		}
+	}
 }
 
 enum struct DHookData
@@ -55,12 +82,42 @@ enum struct EntityOutputData
 	char classname[64];
 	char output[64];
 	EntityOutput callback;
+	
+	void Toggle(bool enable)
+	{
+		if (enable)
+			HookEntityOutput(this.classname, this.output, this.callback);
+		else
+			UnhookEntityOutput(this.classname, this.output, this.callback);
+	}
 }
 
 enum struct CommandListenerData
 {
 	char command[64];
 	CommandListener callback;
+	
+	void Toggle(bool enable)
+	{
+		if (enable)
+			AddCommandListener(this.callback, this.command);
+		else
+			RemoveCommandListener(this.callback, this.command);
+	}
+}
+
+enum struct TempEntHookData
+{
+	char name[64];
+	TEHook hook;
+	
+	void Toggle(bool enable)
+	{
+		if (enable)
+			AddTempEntHook(this.name, this.hook);
+		else
+			RemoveTempEntHook(this.name, this.hook);
+	}
 }
 
 static bool s_isInitialized;
@@ -78,6 +135,7 @@ static ArrayList s_sdkHooks; // ArrayList<SDKHookData>
 static ArrayList s_convars; // ArrayList<ConVarData>
 static ArrayList s_entityOutputs; // ArrayList<EntityOutputData>
 static ArrayList s_commandListeners; // ArrayList<CommandListenerData>
+static ArrayList s_tempEntHooks; // ArrayList<TempEntHookData>
 
 //=============================================================================
 // Core Features
@@ -113,6 +171,7 @@ stock void PSM_Init(const char[] convarName, GameData gamedata = null)
 	s_convars = new ArrayList(sizeof(ConVarData));
 	s_entityOutputs = new ArrayList(sizeof(EntityOutputData));
 	s_commandListeners = new ArrayList(sizeof(CommandListenerData));
+	s_tempEntHooks = new ArrayList(sizeof(TempEntHookData));
 	
 	s_isInitialized = true;
 }
@@ -174,7 +233,7 @@ stock void PSM_SetPluginState(bool enable)
 		EventData data;
 		if (s_events.GetArray(i, data))
 		{
-			ToggleEvent(data, enable);
+			data.Toggle(enable);
 		}
 	}
 	
@@ -184,7 +243,7 @@ stock void PSM_SetPluginState(bool enable)
 		DetourData data;
 		if (s_detours.GetArray(i, data))
 		{
-			ToggleDetour(data, enable);
+			data.Toggle(enable);
 		}
 	}
 	
@@ -211,7 +270,7 @@ stock void PSM_SetPluginState(bool enable)
 		EntityOutputData data;
 		if (s_entityOutputs.GetArray(i, data))
 		{
-			ToggleEntityOutputHook(data, enable);
+			data.Toggle(enable);
 		}
 	}
 	
@@ -221,13 +280,24 @@ stock void PSM_SetPluginState(bool enable)
 		CommandListenerData data;
 		if (s_commandListeners.GetArray(i, data))
 		{
-			ToggleCommandListener(data, enable);
+			data.Toggle(enable);
 		}
 	}
 	
+	// ConVars
 	for (int i = 0; i < s_convars.Length; i++)
 	{
 		ToggleConVar(i, enable);
+	}
+	
+	// TE hooks
+	for (int i = 0; i < s_tempEntHooks.Length; i++)
+	{
+		TempEntHookData data;
+		if (s_tempEntHooks.GetArray(i, data))
+		{
+			data.Toggle(enable);
+		}
 	}
 	
 	if (s_stateChangedFwd.FunctionCount > 0)
@@ -324,7 +394,7 @@ stock void PSM_RemoveEventHook(const char[] name, EventHook callback, EventHookM
 		if (s_events.GetArray(i, data) && StrEqual(name, data.name) && callback == data.callback && mode == data.mode)
 		{
 			if (PSM_IsEnabled())
-				ToggleEvent(data, false);
+				data.Toggle(false);
 			
 			s_events.Erase(i);
 		}
@@ -400,7 +470,7 @@ stock void PSM_RemoveDynamicDetour(const char[] name, DHookCallback callbackPre 
 		if (s_detours.GetArray(i, data) && StrEqual(name, data.name) && callbackPre == data.callbackPre && callbackPost == data.callbackPost)
 		{
 			if (PSM_IsEnabled())
-				ToggleDetour(data, false);
+				data.Toggle(false);
 			
 			s_detours.Erase(i);
 		}
@@ -742,7 +812,7 @@ stock void PSM_AddEntityOutputHook(const char[] classname, const char[] output, 
  * 						The command is case insensitive.
  * @error				Plugin state manager not initialized.
  */
-stock void PSM_AddCommandListener(CommandListener callback, const char[] command)
+stock void PSM_AddCommandListener(CommandListener callback, const char[] command = "")
 {
 	ThrowIfNotInitialized();
 	
@@ -751,6 +821,24 @@ stock void PSM_AddCommandListener(CommandListener callback, const char[] command
 	data.callback = callback;
 	
 	s_commandListeners.PushArray(data);
+}
+
+/**
+ * Registers a temp entity hook.
+ *
+ * @param te_name		TE name to hook.
+ * @param hook			Function to use as a hook.
+ * @error				Plugin state manager not initialized.
+ */
+stock void PSM_AddTempEntHook(const char[] te_name, TEHook hook)
+{
+	ThrowIfNotInitialized();
+	
+	TempEntHookData data;
+	strcopy(data.name, sizeof(data.name), te_name);
+	data.hook = hook;
+	
+	s_tempEntHooks.PushArray(data);
 }
 
 //*******************************************************************************************************************************************************
@@ -800,33 +888,6 @@ static int EntIndexToEntRefSafe(int entity)
 	return IsValidEdict(entity) ? EntIndexToEntRef(entity) : entity;
 }
 
-static void ToggleDetour(DetourData data, bool enable)
-{
-	if (data.callbackPre != INVALID_FUNCTION)
-	{
-		if (enable)
-			data.detour.Enable(Hook_Pre, data.callbackPre);
-		else
-			data.detour.Disable(Hook_Pre, data.callbackPre);
-	}
-	
-	if (data.callbackPost != INVALID_FUNCTION)
-	{
-		if (enable)
-			data.detour.Enable(Hook_Post, data.callbackPost);
-		else
-			data.detour.Disable(Hook_Post, data.callbackPost);
-	}
-}
-
-static void ToggleEvent(EventData data, bool enable)
-{
-	if (enable)
-		HookEvent(data.name, data.callback, data.mode);
-	else
-		UnhookEvent(data.name, data.callback, data.mode);
-}
-
 static void ToggleConVar(int index, bool enable)
 {
 	ConVarData data;
@@ -872,22 +933,6 @@ static void ToggleConVar(int index, bool enable)
 			s_convars.SetArray(index, data);
 		}
 	}
-}
-
-static void ToggleEntityOutputHook(EntityOutputData data, bool enable)
-{
-	if (enable)
-		HookEntityOutput(data.classname, data.output, data.callback);
-	else
-		UnhookEntityOutput(data.classname, data.output, data.callback);
-}
-
-static void ToggleCommandListener(CommandListenerData data, bool enable)
-{
-	if (enable)
-		AddCommandListener(data.callback, data.command);
-	else
-		RemoveCommandListener(data.callback, data.command);
 }
 
 static void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
