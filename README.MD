@@ -2,8 +2,8 @@
 
 ### An include for SourceMod plugins that aims to reduce boilerplate code for enabling and disabling.
 
-> [!NOTE]  
-> This was primarily made for personal use and may not be suitable for all plugins.
+> [!WARNING]  
+> This was primarily made for my own personal use. It may not be suitable for all plugins, and may change at any moment.
 
 This kind of code is quite common:
 
