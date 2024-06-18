@@ -53,11 +53,11 @@ public void OnPluginEnd()
 public void OnClientPutInServer(int client)
 {
 	// You can use the dynamic hook handle here.
-	PSM_DynamicHookEntity(g_hookSetModel, Hook_Pre, client, OnPlayerSetModelPre);
+	PSM_DHookEntity(g_hookSetModel, Hook_Pre, client, OnPlayerSetModelPre);
 	
 	// ...or access it by name, in case you don't want to store the hook handles yourself.
 	// (keep in mind that we just hooked the same entity twice)
-	PSM_DynamicHookEntityByName("CBaseEntity::SetModel", Hook_Pre, client, OnPlayerSetModelPre);
+	PSM_DHookEntityByName("CBaseEntity::SetModel", Hook_Pre, client, OnPlayerSetModelPre);
 }
 
 public void OnEntityCreated(int entity, const char[] classname)
@@ -69,13 +69,14 @@ public void OnEntityCreated(int entity, const char[] classname)
 	}
 }
 
-public void OnMapStart()
+public void OnEntityDestroyed(int entity)
 {
 	// Certain functions, like forwards, still require the good old guard clause.
 	if (!PSM_IsEnabled())
 		return;
 	
-	LogMessage("The map has started");
+	// When using SDKHooks, make sure to unhook the entity here to avoid filling up the cache.
+	PSM_SDKUnhook(entity);
 }
 
 static void OnPluginStateChanged(bool enable)
