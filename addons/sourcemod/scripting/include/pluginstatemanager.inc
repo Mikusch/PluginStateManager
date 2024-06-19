@@ -554,7 +554,7 @@ stock int PSM_DHookEntityByName(const char[] name, HookMode mode, int entity, DH
 	if (!PSM_IsEnabled())
 		return INVALID_HOOK_ID;
 	
-	int index = s_dynamicHooks.FindString(name, DHookData::name);
+	int index = s_dynamicHooks.FindString(name);
 	if (index == -1)
 		ThrowError("Failed to find dynamic hook '%s'", name);
 	
@@ -612,7 +612,7 @@ stock int PSM_DynamicHookGameRulesByName(const char[] name, HookMode mode, DHook
 	if (!PSM_IsEnabled())
 		return INVALID_HOOK_ID;
 	
-	int index = s_dynamicHooks.FindString(name, DHookData::name);
+	int index = s_dynamicHooks.FindString(name);
 	if (index == -1)
 		ThrowError("Failed to find dynamic hook '%s'", name);
 	
