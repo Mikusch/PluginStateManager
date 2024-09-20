@@ -120,6 +120,19 @@ enum struct TempEntHookData
 	}
 }
 
+enum struct NormalSHookData
+{
+	NormalSHook hook;
+	
+	void Toggle(bool enable)
+	{
+		if (enable)
+			AddNormalSoundHook(this.hook);
+		else
+			RemoveNormalSoundHook(this.hook);
+	}
+}
+
 static bool s_isInitialized;
 static bool s_isEnabled;
 static char s_conVarName[64];
@@ -136,6 +149,7 @@ static ArrayList s_convars; // ArrayList<ConVarData>
 static ArrayList s_entityOutputs; // ArrayList<EntityOutputData>
 static ArrayList s_commandListeners; // ArrayList<CommandListenerData>
 static ArrayList s_tempEntHooks; // ArrayList<TempEntHookData>
+static ArrayList s_normalSHooks; // ArrayList<NormalSHookData>
 
 //=============================================================================
 // Core Features
@@ -172,6 +186,7 @@ stock void PSM_Init(const char[] convarName, GameData gamedata = null)
 	s_entityOutputs = new ArrayList(sizeof(EntityOutputData));
 	s_commandListeners = new ArrayList(sizeof(CommandListenerData));
 	s_tempEntHooks = new ArrayList(sizeof(TempEntHookData));
+	s_normalSHooks = new ArrayList(sizeof(NormalSHookData));
 	
 	s_isInitialized = true;
 }
@@ -280,6 +295,16 @@ stock void PSM_SetPluginState(bool enable)
 	{
 		TempEntHookData data;
 		if (s_tempEntHooks.GetArray(i, data))
+		{
+			data.Toggle(enable);
+		}
+	}
+	
+	// Normal sound hooks
+	for (int i = 0; i < s_normalSHooks.Length; i++)
+	{
+		NormalSHookData data;
+		if (s_normalSHooks.GetArray(i, data))
 		{
 			data.Toggle(enable);
 		}
@@ -824,6 +849,22 @@ stock void PSM_AddTempEntHook(const char[] te_name, TEHook hook)
 	data.hook = hook;
 	
 	s_tempEntHooks.PushArray(data);
+}
+
+/**
+ * Registers a normal sound hook.
+ *
+ * @param hook			Function to use as a hook.
+ * @error				Plugin state manager not initialized.
+ */
+stock void PSM_AddNormalSoundHook(NormalSHook hook)
+{
+	ThrowIfNotInitialized();
+	
+	NormalSHookData data;
+	data.hook = hook;
+	
+	s_normalSHooks.PushArray(data);
 }
 
 //*******************************************************************************************************************************************************
