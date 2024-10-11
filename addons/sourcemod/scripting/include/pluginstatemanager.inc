@@ -3,8 +3,9 @@
 
 #include <dhooks>
 #include <sdkhooks>
+#tryinclude <sourcescramble>
 
-#define PSM_VERSION		1.0.0
+#define PSM_VERSION		1.1.0
 
 typedef PluginStateChangedCallback = function void(bool enabled);
 
@@ -133,6 +134,22 @@ enum struct NormalSHookData
 	}
 }
 
+#if defined __sourcescramble_ext_included
+enum struct MemoryPatchData
+{
+	char name[64];
+	MemoryPatch patch;
+	
+	void Toggle(bool enable)
+	{
+		if (enable)
+			this.patch.Enable();
+		else
+			this.patch.Disable();
+	}
+}
+#endif
+
 static bool s_isInitialized;
 static bool s_isEnabled;
 static char s_conVarName[64];
@@ -150,6 +167,9 @@ static ArrayList s_entityOutputs; // ArrayList<EntityOutputData>
 static ArrayList s_commandListeners; // ArrayList<CommandListenerData>
 static ArrayList s_tempEntHooks; // ArrayList<TempEntHookData>
 static ArrayList s_normalSHooks; // ArrayList<NormalSHookData>
+#if defined __sourcescramble_ext_included
+static ArrayList s_memoryPatches; // ArrayList<MemoryPatchData>
+#endif
 
 //=============================================================================
 // Core Features
@@ -187,6 +207,9 @@ stock void PSM_Init(const char[] convarName, GameData gamedata = null)
 	s_commandListeners = new ArrayList(sizeof(CommandListenerData));
 	s_tempEntHooks = new ArrayList(sizeof(TempEntHookData));
 	s_normalSHooks = new ArrayList(sizeof(NormalSHookData));
+#if defined __sourcescramble_ext_included
+	s_memoryPatches = new ArrayList(sizeof(MemoryPatchData));
+#endif
 	
 	s_isInitialized = true;
 }
@@ -310,6 +333,18 @@ stock void PSM_SetPluginState(bool enable)
 		}
 	}
 	
+#if defined __sourcescramble_ext_included
+	// Memory Patches
+	for (int i = 0; i < s_memoryPatches.Length; i++)
+	{
+		MemoryPatchData data;
+		if (s_memoryPatches.GetArray(i, data))
+		{
+			data.Toggle(enable);
+		}
+	}
+#endif
+	
 	if (s_stateChangedFwd.FunctionCount > 0)
 	{
 		Call_StartForward(s_stateChangedFwd);
@@ -350,6 +385,16 @@ stock bool PSM_IsInitialized()
 stock bool PSM_IsEnabled()
 {
 	return PSM_IsInitialized() && s_isEnabled;
+}
+
+/**
+ * Returns the GameData handle set by 'PSM_Init'.
+ *
+ * @return		GameData handle, or null.
+ */
+stock GameData PSM_GetGameData()
+{
+	return s_gamedata;
 }
 
 //=============================================================================
@@ -866,6 +911,34 @@ stock void PSM_AddNormalSoundHook(NormalSHook hook)
 	
 	s_normalSHooks.PushArray(data);
 }
+
+//=============================================================================
+// Source Scramble
+//=============================================================================
+
+#if defined __sourcescramble_ext_included
+stock MemoryPatch PSM_AddMemoryPatchFromConf(const char[] name)
+{
+	ThrowIfNotInitialized(true);
+	
+	MemoryPatch patch = MemoryPatch.CreateFromConf(s_gamedata, name);
+	if (patch.Validate())
+	{
+		MemoryPatchData data;
+		strcopy(data.name, sizeof(data.name), name);
+		data.patch = patch;
+		
+		s_memoryPatches.PushArray(data);
+		
+		return patch;
+	}
+	else
+	{
+		ThrowError("Failed to validate memory patch '%s'", name);
+		return null;
+	}
+}
+#endif
 
 //*******************************************************************************************************************************************************
 
