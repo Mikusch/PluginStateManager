@@ -24,7 +24,7 @@ enum struct EventData
 	}
 }
 
-enum struct DetourData
+enum struct DynamicDetourData
 {
 	char name[64];
 	DynamicDetour detour;
@@ -51,7 +51,7 @@ enum struct DetourData
 	}
 }
 
-enum struct DHookData
+enum struct DynamicHookData
 {
 	char name[64];
 	DynamicHook hook;
@@ -158,11 +158,11 @@ static GameData s_gamedata;
 static PrivateForward s_stateChangedFwd;
 
 static ArrayList s_events; // ArrayList<EventData>
-static ArrayList s_detours; // ArrayList <DetourData>
-static ArrayList s_dynamicHooks; // ArrayList<DHookData>
+static ArrayList s_dynamicDetours; // ArrayList <DynamicDetourData>
+static ArrayList s_dynamicHooks; // ArrayList<DynamicHookData>
 static ArrayList s_dynamicHookIds; // ArrayList<DHookIdData>
 static ArrayList s_sdkHooks; // ArrayList<SDKHookData>
-static ArrayList s_convars; // ArrayList<ConVarData>
+static ArrayList s_conVars; // ArrayList<ConVarData>
 static ArrayList s_entityOutputs; // ArrayList<EntityOutputData>
 static ArrayList s_commandListeners; // ArrayList<CommandListenerData>
 static ArrayList s_tempEntHooks; // ArrayList<TempEntHookData>
@@ -198,11 +198,11 @@ stock void PSM_Init(const char[] convarName, GameData gamedata = null)
 	s_stateChangedFwd = new PrivateForward(ET_Ignore, Param_Cell);
 	
 	s_events = new ArrayList(sizeof(EventData));
-	s_detours = new ArrayList(sizeof(DetourData));
-	s_dynamicHooks = new ArrayList(sizeof(DHookData));
+	s_dynamicDetours = new ArrayList(sizeof(DynamicDetourData));
+	s_dynamicHooks = new ArrayList(sizeof(DynamicHookData));
 	s_dynamicHookIds = new ArrayList(sizeof(DHookIdData));
 	s_sdkHooks = new ArrayList(sizeof(SDKHookData));
-	s_convars = new ArrayList(sizeof(ConVarData));
+	s_conVars = new ArrayList(sizeof(ConVarData));
 	s_entityOutputs = new ArrayList(sizeof(EntityOutputData));
 	s_commandListeners = new ArrayList(sizeof(CommandListenerData));
 	s_tempEntHooks = new ArrayList(sizeof(TempEntHookData));
@@ -261,10 +261,10 @@ stock void PSM_SetPluginState(bool enable)
 	}
 	
 	// Detours
-	for (int i = 0; i < s_detours.Length; i++)
+	for (int i = 0; i < s_dynamicDetours.Length; i++)
 	{
-		DetourData data;
-		if (s_detours.GetArray(i, data))
+		DynamicDetourData data;
+		if (s_dynamicDetours.GetArray(i, data))
 		{
 			data.Toggle(enable);
 		}
@@ -308,7 +308,7 @@ stock void PSM_SetPluginState(bool enable)
 	}
 	
 	// ConVars
-	for (int i = 0; i < s_convars.Length; i++)
+	for (int i = 0; i < s_conVars.Length; i++)
 	{
 		ToggleConVar(i, enable);
 	}
@@ -334,7 +334,7 @@ stock void PSM_SetPluginState(bool enable)
 	}
 	
 #if defined __sourcescramble_ext_included
-	// Memory Patches
+	// Memory patches
 	for (int i = 0; i < s_memoryPatches.Length; i++)
 	{
 		MemoryPatchData data;
@@ -492,19 +492,19 @@ stock DynamicDetour PSM_AddDynamicDetourFromConf(const char[] name, DHookCallbac
  * @param detour			The DynamicDetour object.
  * @param callbackPre		Optional pre callback function.
  * @param callbackPost		Optional post callback function.
- * @error					Plugin state manager not initialized.
+ * @error					Plugin state manager or GameData handle not initialized.
  */
 stock void PSM_AddDynamicDetour(const char[] name, DynamicDetour detour, DHookCallback callbackPre = INVALID_FUNCTION, DHookCallback callbackPost = INVALID_FUNCTION)
 {
-	ThrowIfNotInitialized(true);
+	ThrowIfNotInitialized();
 	
-	DetourData data;
+	DynamicDetourData data;
 	strcopy(data.name, sizeof(data.name), name);
 	data.detour = detour;
 	data.callbackPre = callbackPre;
 	data.callbackPost = callbackPost;
 	
-	s_detours.PushArray(data);
+	s_dynamicDetours.PushArray(data);
 }
 
 /**
@@ -519,15 +519,15 @@ stock void PSM_RemoveDynamicDetour(const char[] name, DHookCallback callbackPre 
 {
 	ThrowIfNotInitialized();
 	
-	for (int i = s_detours.Length - 1; i >= 0; i--)
+	for (int i = s_dynamicDetours.Length - 1; i >= 0; i--)
 	{
-		DetourData data;
-		if (s_detours.GetArray(i, data) && StrEqual(name, data.name) && callbackPre == data.callbackPre && callbackPost == data.callbackPost)
+		DynamicDetourData data;
+		if (s_dynamicDetours.GetArray(i, data) && StrEqual(name, data.name) && callbackPre == data.callbackPre && callbackPost == data.callbackPost)
 		{
 			if (PSM_IsEnabled())
 				data.Toggle(false);
 			
-			s_detours.Erase(i);
+			s_dynamicDetours.Erase(i);
 		}
 	}
 }
@@ -541,7 +541,7 @@ stock void PSM_RemoveDynamicDetour(const char[] name, DHookCallback callbackPre 
  *
  * @param name		Name of the function in a "Functions" section to load.
  * @return			The DynamicHook on success, null otherwise.
- * @error			Invalid gamedata, plugin state manager not initialized or GameData handle not initialized.
+ * @error			Invalid gamedata or plugin state manager not initialized.
  */
 stock DynamicHook PSM_AddDynamicHookFromConf(const char[] name)
 {
@@ -569,9 +569,9 @@ stock DynamicHook PSM_AddDynamicHookFromConf(const char[] name)
  */
 stock void PSM_AddDynamicHook(const char[] name, DynamicHook hook)
 {
-	ThrowIfNotInitialized(true);
+	ThrowIfNotInitialized();
 	
-	DHookData data;
+	DynamicHookData data;
 	strcopy(data.name, sizeof(data.name), name);
 	data.hook = hook;
 	
@@ -590,7 +590,7 @@ stock void PSM_RemoveDynamicHook(const char[] name)
 	
 	for (int i = s_dynamicHooks.Length - 1; i >= 0; i--)
 	{
-		DHookData data;
+		DynamicHookData data;
 		if (s_dynamicHooks.GetArray(i, data) && StrEqual(name, data.name))
 		{
 			// Unhook any entities that belong to this hook
@@ -628,7 +628,7 @@ stock int PSM_DHookEntityByName(const char[] name, HookMode mode, int entity, DH
 	if (index == -1)
 		ThrowError("Failed to find dynamic hook '%s'", name);
 	
-	DynamicHook hook = s_dynamicHooks.Get(index, DHookData::hook);
+	DynamicHook hook = s_dynamicHooks.Get(index, DynamicHookData::hook);
 	return PSM_DHookEntity(hook, mode, entity, callback);
 }
 
@@ -675,7 +675,7 @@ stock int PSM_DHookEntity(DynamicHook hook, HookMode mode, int entity, DHookCall
  * @return				A hookid on success, INVALID_HOOK_ID otherwise.
  * @error				Plugin state manager not initialized.
  */
-stock int PSM_DynamicHookGameRulesByName(const char[] name, HookMode mode, DHookCallback callback)
+stock int PSM_DHookGameRulesByName(const char[] name, HookMode mode, DHookCallback callback)
 {
 	ThrowIfNotInitialized();
 	
@@ -686,8 +686,8 @@ stock int PSM_DynamicHookGameRulesByName(const char[] name, HookMode mode, DHook
 	if (index == -1)
 		ThrowError("Failed to find dynamic hook '%s'", name);
 	
-	DynamicHook hook = s_dynamicHooks.Get(index, DHookData::hook);
-	return PSM_DynamicHookGameRules(hook, mode, callback);
+	DynamicHook hook = s_dynamicHooks.Get(index, DynamicHookData::hook);
+	return PSM_DHookGameRules(hook, mode, callback);
 }
 
 /**
@@ -701,7 +701,7 @@ stock int PSM_DynamicHookGameRulesByName(const char[] name, HookMode mode, DHook
  * @return				A hookid on success, INVALID_HOOK_ID otherwise.
  * @error				Plugin state manager not initialized.
  */
-stock int PSM_DynamicHookGameRules(DynamicHook hook, HookMode mode, DHookCallback callback)
+stock int PSM_DHookGameRules(DynamicHook hook, HookMode mode, DHookCallback callback)
 {
 	ThrowIfNotInitialized();
 	
@@ -794,15 +794,13 @@ stock void PSM_AddEnforcedConVar(const char[] name, const char[] value)
 	
 	ConVar convar = FindConVar(name);
 	if (!convar)
-	{
 		ThrowError("Failed to find convar '%s'", name);
-	}
 	
 	ConVarData data;
 	strcopy(data.name, sizeof(data.name), name);
 	strcopy(data.value, sizeof(data.value), value);
 	
-	s_convars.PushArray(data);
+	s_conVars.PushArray(data);
 }
 
 /**
@@ -818,21 +816,17 @@ stock void PSM_AddSyncedConVar(const char[] targetName, const char[] sourceName)
 	
 	ConVar convar = FindConVar(targetName);
 	if (!convar)
-	{
 		ThrowError("Failed to find convar '%s'", targetName);
-	}
 	
 	ConVar sourceConVar = FindConVar(sourceName);
 	if (!sourceConVar)
-	{
 		ThrowError("Failed to find convar '%s'", sourceName);
-	}
 	
 	ConVarData data;
 	strcopy(data.name, sizeof(data.name), targetName);
 	data.sourceConVar = sourceConVar;
 	
-	s_convars.PushArray(data);
+	s_conVars.PushArray(data);
 }
 
 //=============================================================================
@@ -917,6 +911,12 @@ stock void PSM_AddNormalSoundHook(NormalSHook hook)
 //=============================================================================
 
 #if defined __sourcescramble_ext_included
+/**
+ * Registers a memory patch from game config.
+ *
+ * @param name			Name of the patch in a "MemPatches" section to load.
+ * @error				Invalid gamedata or plugin state manager not initialized.
+ */
 stock MemoryPatch PSM_AddMemoryPatchFromConf(const char[] name)
 {
 	ThrowIfNotInitialized(true);
@@ -945,29 +945,25 @@ stock MemoryPatch PSM_AddMemoryPatchFromConf(const char[] name)
 static void ThrowIfNotInitialized(bool requireGameData = false)
 {
 	if (!PSM_IsInitialized())
-	{
-		ThrowError("The plugin state manager is not initialized! Call 'PSM_Init' to use this function!");
-	}
+		ThrowError("The plugin state manager has not yet been initialized! You must call 'PSM_Init' to use this functionality.");
 	
 	if (requireGameData && !s_gamedata)
-	{
-		ThrowError("GameData handle is not initialized! Pass a valid GameData handle to 'PSM_Init' to use this function!");
-	}
+		ThrowError("GameData handle is not initialized! You must pass a valid handle to 'PSM_Init' to use this functionality.");
 }
 
 static void InitializeStateConVar()
 {
+	if (s_stateConVar)
+		return;
+	
+	s_stateConVar = FindConVar(s_conVarName);
 	if (!s_stateConVar)
 	{
-		s_stateConVar = FindConVar(s_conVarName);
-		if (!s_stateConVar)
-		{
-			s_stateConVar = CreateConVar(s_conVarName, "Enable the plugin?", "1");
-			LogMessage("ConVar '%s' has been automatically created.", s_conVarName);
-		}
-		
-		s_stateConVar.AddChangeHook(OnEnableConVarChanged);
+		s_stateConVar = CreateConVar(s_conVarName, "Enable the plugin?", "1");
+		LogMessage("ConVar '%s' has been automatically created.", s_conVarName);
 	}
+	
+	s_stateConVar.AddChangeHook(OnEnableConVarChanged);
 }
 
 static void OnEnableConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
@@ -990,7 +986,7 @@ static int EntIndexToEntRefSafe(int entity)
 static void ToggleConVar(int index, bool enable)
 {
 	ConVarData data;
-	if (!s_convars.GetArray(index, data))
+	if (!s_conVars.GetArray(index, data))
 		return;
 	
 	ConVar convar = FindConVar(data.name);
@@ -999,10 +995,8 @@ static void ToggleConVar(int index, bool enable)
 	
 	if (enable)
 	{
-		// Store the current value so we can reset the convar on disable
 		convar.GetString(data.initialValue, sizeof(data.initialValue));
 		
-		// Copy the value from the setting convar if it isn't set
 		if (!data.value[0] && data.sourceConVar)
 		{
 			char value[64];
@@ -1012,15 +1006,13 @@ static void ToggleConVar(int index, bool enable)
 			data.sourceConVar.AddChangeHook(OnSourceConVarChanged);
 		}
 		
-		s_convars.SetArray(index, data);
+		s_conVars.SetArray(index, data);
 		
-		// Update the current value
 		convar.SetString(data.value);
 		convar.AddChangeHook(OnConVarChanged);
 	}
 	else
 	{
-		// Restore the old convar value
 		convar.RemoveChangeHook(OnConVarChanged);
 		convar.SetString(data.initialValue);
 		
@@ -1029,7 +1021,7 @@ static void ToggleConVar(int index, bool enable)
 			data.value[0] = '\0';
 			data.sourceConVar.RemoveChangeHook(OnSourceConVarChanged);
 			
-			s_convars.SetArray(index, data);
+			s_conVars.SetArray(index, data);
 		}
 	}
 }
@@ -1039,20 +1031,18 @@ static void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] n
 	char name[64];
 	convar.GetName(name, sizeof(name));
 	
-	int index = s_convars.FindString(name);
+	int index = s_conVars.FindString(name);
 	if (index == -1)
 		return;
 	
 	ConVarData data;
-	if (s_convars.GetArray(index, data))
+	if (s_conVars.GetArray(index, data))
 	{
 		if (!StrEqual(newValue, data.value))
 		{
-			// Update value to reset
 			strcopy(data.initialValue, sizeof(data.initialValue), newValue);
-			s_convars.SetArray(index, data);
+			s_conVars.SetArray(index, data);
 			
-			// Restore our desired value
 			convar.SetString(oldValue);
 		}
 	}
@@ -1060,19 +1050,19 @@ static void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] n
 
 static void OnSourceConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
-	int index = s_convars.FindValue(convar, ConVarData::sourceConVar);
+	int index = s_conVars.FindValue(convar, ConVarData::sourceConVar);
 	if (index == -1)
 		return;
 	
 	ConVarData data;
-	if (s_convars.GetArray(index, data))
+	if (s_conVars.GetArray(index, data))
 	{
-		ConVar actualConVar = FindConVar(data.name);
-		if (!actualConVar)
+		ConVar targetConVar = FindConVar(data.name);
+		if (!targetConVar)
 			return;
 		
-		actualConVar.RemoveChangeHook(OnConVarChanged);
-		actualConVar.SetString(newValue);
-		actualConVar.AddChangeHook(OnConVarChanged);
+		targetConVar.RemoveChangeHook(OnConVarChanged);
+		targetConVar.SetString(newValue);
+		targetConVar.AddChangeHook(OnConVarChanged);
 	}
 }
