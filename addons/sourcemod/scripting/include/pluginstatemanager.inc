@@ -5,7 +5,7 @@
 #include <sdkhooks>
 #tryinclude <sourcescramble>
 
-#define PSM_VERSION		1.1.0
+#define PSM_VERSION		1.1.1
 
 typedef PluginStateChangedCallback = function void(bool enabled);
 
@@ -424,6 +424,9 @@ stock void PSM_AddEventHook(const char[] name, EventHook callback, EventHookMode
 		data.mode = mode;
 		
 		s_events.PushArray(data);
+		
+		if (PSM_IsEnabled())
+			data.Toggle(true);
 	}
 	else
 	{
@@ -505,6 +508,9 @@ stock void PSM_AddDynamicDetour(const char[] name, DynamicDetour detour, DHookCa
 	data.callbackPost = callbackPost;
 	
 	s_dynamicDetours.PushArray(data);
+	
+	if (PSM_IsEnabled())
+		data.Toggle(true);
 }
 
 /**
@@ -800,7 +806,10 @@ stock void PSM_AddEnforcedConVar(const char[] name, const char[] value)
 	strcopy(data.name, sizeof(data.name), name);
 	strcopy(data.value, sizeof(data.value), value);
 	
-	s_conVars.PushArray(data);
+	int index = s_conVars.PushArray(data);
+	
+	if (PSM_IsEnabled())
+		ToggleConVar(index, true);
 }
 
 /**
@@ -826,7 +835,10 @@ stock void PSM_AddSyncedConVar(const char[] targetName, const char[] sourceName)
 	strcopy(data.name, sizeof(data.name), targetName);
 	data.sourceConVar = sourceConVar;
 	
-	s_conVars.PushArray(data);
+	int index = s_conVars.PushArray(data);
+	
+	if (PSM_IsEnabled())
+		ToggleConVar(index, true);
 }
 
 //=============================================================================
@@ -851,6 +863,9 @@ stock void PSM_AddEntityOutputHook(const char[] classname, const char[] output, 
 	data.callback = callback;
 	
 	s_entityOutputs.PushArray(data);
+	
+	if (PSM_IsEnabled())
+		data.Toggle(true);
 }
 
 /**
@@ -870,6 +885,9 @@ stock void PSM_AddCommandListener(CommandListener callback, const char[] command
 	data.callback = callback;
 	
 	s_commandListeners.PushArray(data);
+	
+	if (PSM_IsEnabled())
+		data.Toggle(true);
 }
 
 /**
@@ -888,6 +906,9 @@ stock void PSM_AddTempEntHook(const char[] te_name, TEHook hook)
 	data.hook = hook;
 	
 	s_tempEntHooks.PushArray(data);
+	
+	if (PSM_IsEnabled())
+		data.Toggle(true);
 }
 
 /**
@@ -904,6 +925,9 @@ stock void PSM_AddNormalSoundHook(NormalSHook hook)
 	data.hook = hook;
 	
 	s_normalSHooks.PushArray(data);
+	
+	if (PSM_IsEnabled())
+		data.Toggle(true);
 }
 
 //=============================================================================
@@ -929,6 +953,9 @@ stock MemoryPatch PSM_AddMemoryPatchFromConf(const char[] name)
 		data.patch = patch;
 		
 		s_memoryPatches.PushArray(data);
+		
+		if (PSM_IsEnabled())
+			data.Toggle(true);
 		
 		return patch;
 	}
