@@ -986,7 +986,7 @@ static void InitializeStateConVar()
 	s_stateConVar = FindConVar(s_conVarName);
 	if (!s_stateConVar)
 	{
-		s_stateConVar = CreateConVar(s_conVarName, "Enable the plugin?", "1");
+		s_stateConVar = CreateConVar(s_conVarName, "1", "Enable the plugin?");
 		LogMessage("ConVar '%s' has been automatically created.", s_conVarName);
 	}
 	
