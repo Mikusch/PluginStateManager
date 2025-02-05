@@ -107,6 +107,22 @@ enum struct CommandListenerData
 	}
 }
 
+enum struct MultiTargetFilterData
+{
+	char pattern[64];
+	MultiTargetFilter filter;
+	char phrase[64];
+	bool phraseIsML;
+	
+	void Toggle(bool enable)
+	{
+		if (enable)
+			AddMultiTargetFilter(this.pattern, this.filter, this.phrase, this.phraseIsML);
+		else
+			RemoveMultiTargetFilter(this.pattern, this.filter);
+	}
+}
+
 enum struct TempEntHookData
 {
 	char name[64];
@@ -165,6 +181,7 @@ static ArrayList s_sdkHooks; // ArrayList<SDKHookData>
 static ArrayList s_conVars; // ArrayList<ConVarData>
 static ArrayList s_entityOutputs; // ArrayList<EntityOutputData>
 static ArrayList s_commandListeners; // ArrayList<CommandListenerData>
+static ArrayList s_multiTargetFilters; // ArrayList<MultiTargetFilterData>
 static ArrayList s_tempEntHooks; // ArrayList<TempEntHookData>
 static ArrayList s_normalSHooks; // ArrayList<NormalSHookData>
 #if defined __sourcescramble_ext_included
@@ -205,6 +222,7 @@ stock void PSM_Init(const char[] convarName, GameData gamedata = null)
 	s_conVars = new ArrayList(sizeof(ConVarData));
 	s_entityOutputs = new ArrayList(sizeof(EntityOutputData));
 	s_commandListeners = new ArrayList(sizeof(CommandListenerData));
+	s_multiTargetFilters = new ArrayList(sizeof(MultiTargetFilterData));
 	s_tempEntHooks = new ArrayList(sizeof(TempEntHookData));
 	s_normalSHooks = new ArrayList(sizeof(NormalSHookData));
 #if defined __sourcescramble_ext_included
@@ -302,6 +320,16 @@ stock void PSM_SetPluginState(bool enable)
 	{
 		CommandListenerData data;
 		if (s_commandListeners.GetArray(i, data))
+		{
+			data.Toggle(enable);
+		}
+	}
+	
+	// Multi-target filters
+	for (int i = 0; i < s_multiTargetFilters.Length; i++)
+	{
+		MultiTargetFilterData data;
+		if (s_multiTargetFilters.GetArray(i, data))
 		{
 			data.Toggle(enable);
 		}
@@ -885,6 +913,31 @@ stock void PSM_AddCommandListener(CommandListener callback, const char[] command
 	data.callback = callback;
 	
 	s_commandListeners.PushArray(data);
+	
+	if (PSM_IsEnabled())
+		data.Toggle(true);
+}
+
+/**
+ * Registers a multi-target filter.
+ *
+ * @param pattern		Pattern to match (case sensitive).
+ * @param filter		Filter function.
+ * @param phrase		Descriptive phrase to display on successful match.
+ * @param phraseIsML	True if phrase is multi-lingual, false otherwise.
+ * @error				Plugin state manager not initialized.
+ */
+stock void PSM_AddMultiTargetFilter(const char[] pattern, MultiTargetFilter filter, const char[] phrase, bool phraseIsML)
+{
+	ThrowIfNotInitialized();
+	
+	MultiTargetFilterData data;
+	strcopy(data.pattern, sizeof(data.pattern), pattern);
+	data.filter = filter;
+	strcopy(data.phrase, sizeof(data.phrase), phrase);
+	data.phraseIsML = phraseIsML;
+	
+	s_multiTargetFilters.PushArray(data);
 	
 	if (PSM_IsEnabled())
 		data.Toggle(true);
