@@ -5,7 +5,7 @@
 #include <sdkhooks>
 #tryinclude <sourcescramble>
 
-#define PSM_VERSION		1.1.1
+#define PSM_VERSION		1.1.2
 
 typedef PluginStateChangedCallback = function void(bool enabled);
 
@@ -76,6 +76,20 @@ enum struct ConVarData
 	char value[64];
 	char initialValue[64];
 	ConVar sourceConVar;
+}
+
+enum struct ConVarChangeHookData
+{
+	ConVar convar;
+	ConVarChanged callback;
+	
+	void Toggle(bool enable)
+	{
+		if (enable)
+			this.convar.AddChangeHook(this.callback);
+		else
+			this.convar.RemoveChangeHook(this.callback);
+	}
 }
 
 enum struct EntityOutputData
@@ -179,6 +193,7 @@ static ArrayList s_dynamicHooks; // ArrayList<DynamicHookData>
 static ArrayList s_dynamicHookIds; // ArrayList<DHookIdData>
 static ArrayList s_sdkHooks; // ArrayList<SDKHookData>
 static ArrayList s_conVars; // ArrayList<ConVarData>
+static ArrayList s_conVarChangeHooks; // ArrayList<ConVarChangeHookData>
 static ArrayList s_entityOutputs; // ArrayList<EntityOutputData>
 static ArrayList s_commandListeners; // ArrayList<CommandListenerData>
 static ArrayList s_multiTargetFilters; // ArrayList<MultiTargetFilterData>
@@ -220,6 +235,7 @@ stock void PSM_Init(const char[] convarName, GameData gamedata = null)
 	s_dynamicHookIds = new ArrayList(sizeof(DHookIdData));
 	s_sdkHooks = new ArrayList(sizeof(SDKHookData));
 	s_conVars = new ArrayList(sizeof(ConVarData));
+	s_conVarChangeHooks = new ArrayList(sizeof(ConVarChangeHookData));
 	s_entityOutputs = new ArrayList(sizeof(EntityOutputData));
 	s_commandListeners = new ArrayList(sizeof(CommandListenerData));
 	s_multiTargetFilters = new ArrayList(sizeof(MultiTargetFilterData));
@@ -339,6 +355,16 @@ stock void PSM_SetPluginState(bool enable)
 	for (int i = 0; i < s_conVars.Length; i++)
 	{
 		ToggleConVar(i, enable);
+	}
+	
+	// ConVar change hooks
+	for (int i = 0; i < s_conVarChangeHooks.Length; i++)
+	{
+		ConVarChangeHookData data;
+		if (s_conVarChangeHooks.GetArray(i, data))
+		{
+			data.Toggle(enable);
+		}
 	}
 	
 	// TE hooks
@@ -867,6 +893,27 @@ stock void PSM_AddSyncedConVar(const char[] targetName, const char[] sourceName)
 	
 	if (PSM_IsEnabled())
 		ToggleConVar(index, true);
+}
+
+/**
+ * Registers a hook for when a console variable's value is changed.
+ *
+ * @param convar	The convar.
+ * @param callback	An OnConVarChanged function pointer.
+ * @error			Plugin state manager not initialized.
+ */
+stock void PSM_AddConVarChangeHook(ConVar convar, ConVarChanged callback)
+{
+	ThrowIfNotInitialized();
+	
+	ConVarChangeHookData data;
+	data.convar = convar;
+	data.callback = callback;
+	
+	s_conVarChangeHooks.PushArray(data);
+	
+	if (PSM_IsEnabled())
+		data.Toggle(true);
 }
 
 //=============================================================================
