@@ -92,7 +92,7 @@ enum struct ConVarChangeHookData
 	}
 }
 
-enum struct EntityOutputData
+enum struct EntityOutputHookData
 {
 	char classname[64];
 	char output[64];
@@ -104,6 +104,22 @@ enum struct EntityOutputData
 			HookEntityOutput(this.classname, this.output, this.callback);
 		else
 			UnhookEntityOutput(this.classname, this.output, this.callback);
+	}
+}
+
+enum struct UserMessageHookData
+{
+	UserMsg msg_id;
+	MsgHook hook;
+	bool intercept;
+	MsgPostHook post;
+	
+	void Toggle(bool enable)
+	{
+		if (enable)
+			HookUserMessage(this.msg_id, this.hook, this.intercept, this.post);
+		else
+			UnhookUserMessage(this.msg_id, this.hook, this.intercept);
 	}
 }
 
@@ -194,7 +210,8 @@ static ArrayList s_dynamicHookIds; // ArrayList<DHookIdData>
 static ArrayList s_sdkHooks; // ArrayList<SDKHookData>
 static ArrayList s_conVars; // ArrayList<ConVarData>
 static ArrayList s_conVarChangeHooks; // ArrayList<ConVarChangeHookData>
-static ArrayList s_entityOutputs; // ArrayList<EntityOutputData>
+static ArrayList s_entityOutputHooks; // ArrayList<EntityOutputHookData>
+static ArrayList s_userMessageHooks; // ArrayList<UserMessageHookData>
 static ArrayList s_commandListeners; // ArrayList<CommandListenerData>
 static ArrayList s_multiTargetFilters; // ArrayList<MultiTargetFilterData>
 static ArrayList s_tempEntHooks; // ArrayList<TempEntHookData>
@@ -236,7 +253,8 @@ stock void PSM_Init(const char[] convarName, GameData gamedata = null)
 	s_sdkHooks = new ArrayList(sizeof(SDKHookData));
 	s_conVars = new ArrayList(sizeof(ConVarData));
 	s_conVarChangeHooks = new ArrayList(sizeof(ConVarChangeHookData));
-	s_entityOutputs = new ArrayList(sizeof(EntityOutputData));
+	s_entityOutputHooks = new ArrayList(sizeof(EntityOutputHookData));
+	s_userMessageHooks = new ArrayList(sizeof(UserMessageHookData));
 	s_commandListeners = new ArrayList(sizeof(CommandListenerData));
 	s_multiTargetFilters = new ArrayList(sizeof(MultiTargetFilterData));
 	s_tempEntHooks = new ArrayList(sizeof(TempEntHookData));
@@ -321,11 +339,21 @@ stock void PSM_SetPluginState(bool enable)
 		}
 	}
 	
-	// Entity outputs
-	for (int i = 0; i < s_entityOutputs.Length; i++)
+	// Entity output hooks
+	for (int i = 0; i < s_entityOutputHooks.Length; i++)
 	{
-		EntityOutputData data;
-		if (s_entityOutputs.GetArray(i, data))
+		EntityOutputHookData data;
+		if (s_entityOutputHooks.GetArray(i, data))
+		{
+			data.Toggle(enable);
+		}
+	}
+	
+	// User message hooks
+	for (int i = 0; i < s_userMessageHooks.Length; i++)
+	{
+		UserMessageHookData data;
+		if (s_userMessageHooks.GetArray(i, data))
 		{
 			data.Toggle(enable);
 		}
@@ -932,12 +960,39 @@ stock void PSM_AddEntityOutputHook(const char[] classname, const char[] output, 
 {
 	ThrowIfNotInitialized();
 	
-	EntityOutputData data;
+	EntityOutputHookData data;
 	strcopy(data.classname, sizeof(data.classname), classname);
 	strcopy(data.output, sizeof(data.output), output);
 	data.callback = callback;
 	
-	s_entityOutputs.PushArray(data);
+	s_entityOutputHooks.PushArray(data);
+	
+	if (PSM_IsEnabled())
+		data.Toggle(true);
+}
+
+/**
+ * Registers a user message hook.
+ *
+ * @param msg_id		Message index.
+ * @param hook			Function to use as a hook.
+ * @param intercept		If intercept is true, message will be fully intercepted,
+ * 						allowing the user to block the message.  Otherwise,
+ * 						the hook is normal and ignores the return value.
+ * @param post			Notification function.
+ * @error				Plugin state manager not initialized or invalid message index.
+ */
+stock void PSM_AddUserMessageHook(UserMsg msg_id, MsgHook hook, bool intercept = false, MsgPostHook post = INVALID_FUNCTION)
+{
+	ThrowIfNotInitialized();
+	
+	UserMessageHookData data;
+	data.msg_id = msg_id;
+	data.hook = hook;
+	data.intercept = intercept;
+	data.post = post;
+	
+	s_userMessageHooks.PushArray(data);
 	
 	if (PSM_IsEnabled())
 		data.Toggle(true);
