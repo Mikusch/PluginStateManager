@@ -5,7 +5,7 @@
 #include <sdkhooks>
 #tryinclude <sourcescramble>
 
-#define PSM_VERSION		1.1.2
+#define PSM_VERSION		1.1.3
 
 typedef PluginStateChangedCallback = function void(bool enabled);
 
