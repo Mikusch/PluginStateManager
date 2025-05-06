@@ -70,10 +70,16 @@ enum struct SDKHookData
 	SDKHookCB callback;
 }
 
-enum struct ConVarData
+enum struct EnforcedConVarData
 {
 	char name[64];
 	char value[64];
+	char initialValue[64];
+}
+
+enum struct SyncedConVarData
+{
+	char name[64];
 	char initialValue[64];
 	ConVar sourceConVar;
 }
@@ -208,7 +214,8 @@ static ArrayList s_dynamicDetours; // ArrayList <DynamicDetourData>
 static ArrayList s_dynamicHooks; // ArrayList<DynamicHookData>
 static ArrayList s_dynamicHookIds; // ArrayList<DHookIdData>
 static ArrayList s_sdkHooks; // ArrayList<SDKHookData>
-static ArrayList s_conVars; // ArrayList<ConVarData>
+static ArrayList s_enforcedConVars; // ArrayList<EnforcedConVarData>
+static ArrayList s_syncedConVars;   // ArrayList<SyncedConVarData>
 static ArrayList s_conVarChangeHooks; // ArrayList<ConVarChangeHookData>
 static ArrayList s_entityOutputHooks; // ArrayList<EntityOutputHookData>
 static ArrayList s_userMessageHooks; // ArrayList<UserMessageHookData>
@@ -251,7 +258,8 @@ stock void PSM_Init(const char[] convarName, GameData gamedata = null)
 	s_dynamicHooks = new ArrayList(sizeof(DynamicHookData));
 	s_dynamicHookIds = new ArrayList(sizeof(DHookIdData));
 	s_sdkHooks = new ArrayList(sizeof(SDKHookData));
-	s_conVars = new ArrayList(sizeof(ConVarData));
+	s_enforcedConVars = new ArrayList(sizeof(EnforcedConVarData));
+	s_syncedConVars = new ArrayList(sizeof(SyncedConVarData));
 	s_conVarChangeHooks = new ArrayList(sizeof(ConVarChangeHookData));
 	s_entityOutputHooks = new ArrayList(sizeof(EntityOutputHookData));
 	s_userMessageHooks = new ArrayList(sizeof(UserMessageHookData));
@@ -379,10 +387,16 @@ stock void PSM_SetPluginState(bool enable)
 		}
 	}
 	
-	// ConVars
-	for (int i = 0; i < s_conVars.Length; i++)
+	// Enforced ConVars
+	for (int i = 0; i < s_enforcedConVars.Length; i++)
 	{
-		ToggleConVar(i, enable);
+		ToggleEnforcedConVar(i, enable);
+	}
+
+	// Synced ConVars
+	for (int i = 0; i < s_syncedConVars.Length; i++)
+	{
+		ToggleSyncedConVar(i, enable);
 	}
 	
 	// ConVar change hooks
@@ -879,19 +893,19 @@ stock void PSM_SDKUnhook(int entity)
 stock void PSM_AddEnforcedConVar(const char[] name, const char[] value)
 {
 	ThrowIfNotInitialized();
-	
+
 	ConVar convar = FindConVar(name);
 	if (!convar)
 		ThrowError("Failed to find convar '%s'", name);
-	
-	ConVarData data;
+
+	EnforcedConVarData data;
 	strcopy(data.name, sizeof(data.name), name);
 	strcopy(data.value, sizeof(data.value), value);
-	
-	int index = s_conVars.PushArray(data);
-	
+
+	int index = s_enforcedConVars.PushArray(data);
+
 	if (PSM_IsEnabled())
-		ToggleConVar(index, true);
+		ToggleEnforcedConVar(index, true);
 }
 
 /**
@@ -904,23 +918,23 @@ stock void PSM_AddEnforcedConVar(const char[] name, const char[] value)
 stock void PSM_AddSyncedConVar(const char[] targetName, const char[] sourceName)
 {
 	ThrowIfNotInitialized();
-	
+
 	ConVar convar = FindConVar(targetName);
 	if (!convar)
 		ThrowError("Failed to find convar '%s'", targetName);
-	
-	ConVar sourceConVar = FindConVar(sourceName);
-	if (!sourceConVar)
+
+	ConVar source = FindConVar(sourceName);
+	if (!source)
 		ThrowError("Failed to find convar '%s'", sourceName);
-	
-	ConVarData data;
+
+	SyncedConVarData data;
 	strcopy(data.name, sizeof(data.name), targetName);
-	data.sourceConVar = sourceConVar;
-	
-	int index = s_conVars.PushArray(data);
-	
+	data.sourceConVar = source;
+
+	int index = s_syncedConVars.PushArray(data);
+
 	if (PSM_IsEnabled())
-		ToggleConVar(index, true);
+		ToggleSyncedConVar(index, true);
 }
 
 /**
@@ -1165,86 +1179,125 @@ static int EntIndexToEntRefSafe(int entity)
 	return IsValidEdict(entity) ? EntIndexToEntRef(entity) : entity;
 }
 
-static void ToggleConVar(int index, bool enable)
+static void ToggleEnforcedConVar(int index, bool enable)
 {
-	ConVarData data;
-	if (!s_conVars.GetArray(index, data))
+	EnforcedConVarData data;
+	if (!s_enforcedConVars.GetArray(index, data))
 		return;
-	
+
 	ConVar convar = FindConVar(data.name);
 	if (!convar)
 		return;
-	
+
 	if (enable)
 	{
 		convar.GetString(data.initialValue, sizeof(data.initialValue));
-		
-		if (!data.value[0] && data.sourceConVar)
-		{
-			char value[64];
-			data.sourceConVar.GetString(value, sizeof(value));
-			strcopy(data.value, sizeof(data.value), value);
-			
-			data.sourceConVar.AddChangeHook(OnSourceConVarChanged);
-		}
-		
-		s_conVars.SetArray(index, data);
-		
+		s_enforcedConVars.SetArray(index, data);
+
 		convar.SetString(data.value);
-		convar.AddChangeHook(OnConVarChanged);
+		convar.AddChangeHook(OnEnforcedConVarChanged);
 	}
 	else
 	{
-		convar.RemoveChangeHook(OnConVarChanged);
+		convar.RemoveChangeHook(OnEnforcedConVarChanged);
 		convar.SetString(data.initialValue);
-		
-		if (data.sourceConVar)
-		{
-			data.value[0] = '\0';
-			data.sourceConVar.RemoveChangeHook(OnSourceConVarChanged);
-			
-			s_conVars.SetArray(index, data);
-		}
 	}
 }
 
-static void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
+static void ToggleSyncedConVar(int index, bool enable)
+{
+	SyncedConVarData data;
+	if (!s_syncedConVars.GetArray(index, data))
+		return;
+
+	ConVar target = FindConVar(data.name);
+	if (!target)
+		return;
+
+	if (enable)
+	{
+		target.GetString(data.initialValue, sizeof(data.initialValue));
+
+		char value[64];
+		data.sourceConVar.GetString(value, sizeof(value));
+		target.SetString(value);
+
+		data.sourceConVar.AddChangeHook(OnSourceConVarChanged);
+		s_syncedConVars.SetArray(index, data);
+
+		target.AddChangeHook(OnSyncedConVarChanged);
+	}
+	else
+	{
+		target.RemoveChangeHook(OnSyncedConVarChanged);
+		target.SetString(data.initialValue);
+
+		data.sourceConVar.RemoveChangeHook(OnSourceConVarChanged);
+	}
+}
+
+static void OnEnforcedConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
 	char name[64];
 	convar.GetName(name, sizeof(name));
-	
-	int index = s_conVars.FindString(name);
+
+	int index = s_enforcedConVars.FindString(name);
 	if (index == -1)
 		return;
-	
-	ConVarData data;
-	if (s_conVars.GetArray(index, data))
+
+	EnforcedConVarData data;
+	if (s_enforcedConVars.GetArray(index, data))
 	{
 		if (!StrEqual(newValue, data.value))
 		{
 			strcopy(data.initialValue, sizeof(data.initialValue), newValue);
-			s_conVars.SetArray(index, data);
-			
-			convar.SetString(oldValue);
+			s_enforcedConVars.SetArray(index, data);
+
+			convar.SetString(data.value);
+		}
+	}
+}
+
+static void OnSyncedConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
+{
+	char name[64];
+	convar.GetName(name, sizeof(name));
+
+	int index = s_syncedConVars.FindString(name);
+	if (index == -1)
+		return;
+
+	SyncedConVarData data;
+	if (s_syncedConVars.GetArray(index, data))
+	{
+		char expected[64];
+		data.sourceConVar.GetString(expected, sizeof(expected));
+
+		if (!StrEqual(newValue, expected))
+		{
+			strcopy(data.initialValue, sizeof(data.initialValue), newValue);
+			s_syncedConVars.SetArray(index, data);
+
+			convar.SetString(expected);
 		}
 	}
 }
 
 static void OnSourceConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
-	int index = s_conVars.FindValue(convar, ConVarData::sourceConVar);
+	int index = s_syncedConVars.FindValue(convar, SyncedConVarData::sourceConVar);
 	if (index == -1)
 		return;
-	
-	ConVarData data;
-	if (s_conVars.GetArray(index, data))
+
+	SyncedConVarData data;
+	if (s_syncedConVars.GetArray(index, data))
 	{
-		ConVar targetConVar = FindConVar(data.name);
-		if (!targetConVar)
+		ConVar target = FindConVar(data.name);
+		if (!target)
 			return;
-		
-		targetConVar.RemoveChangeHook(OnConVarChanged);
-		targetConVar.SetString(newValue);
-		targetConVar.AddChangeHook(OnConVarChanged);
+
+		target.RemoveChangeHook(OnSyncedConVarChanged);
+		target.SetString(newValue);
+		target.AddChangeHook(OnSyncedConVarChanged);
 	}
 }
