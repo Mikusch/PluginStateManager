@@ -5,7 +5,7 @@
 #include <sdkhooks>
 #tryinclude <sourcescramble>
 
-#define PSM_VERSION		1.1.3
+#define PSM_VERSION		1.1.4
 
 typedef PluginStateChangedCallback = function void(bool enabled);
 
@@ -246,7 +246,6 @@ stock void PSM_Init(const char[] convarName, GameData gamedata = null)
 		return;
 	
 	strcopy(s_conVarName, sizeof(s_conVarName), convarName);
-	RequestFrame(InitializeStateConVar);
 	
 	if (gamedata)
 		s_gamedata = view_as<GameData>(CloneHandle(gamedata));
