@@ -5,9 +5,10 @@
 #include <sdkhooks>
 #tryinclude <sourcescramble>
 
-#define PSM_VERSION		1.1.4
+#define PSM_VERSION	1.2.0
 
 typedef PluginStateChangedCallback = function void(bool enabled);
+typedef ShouldEnableCallback = function bool();
 
 enum struct EventData
 {
@@ -208,6 +209,7 @@ static char s_conVarName[64];
 static ConVar s_stateConVar;
 static GameData s_gamedata;
 static PrivateForward s_stateChangedFwd;
+static PrivateForward s_shouldEnableFwd;
 
 static ArrayList s_events; // ArrayList<EventData>
 static ArrayList s_dynamicDetours; // ArrayList <DynamicDetourData>
@@ -251,6 +253,7 @@ stock void PSM_Init(const char[] convarName, GameData gamedata = null)
 		s_gamedata = view_as<GameData>(CloneHandle(gamedata));
 	
 	s_stateChangedFwd = new PrivateForward(ET_Ignore, Param_Cell);
+	s_shouldEnableFwd = new PrivateForward(ET_Single);
 	
 	s_events = new ArrayList(sizeof(EventData));
 	s_dynamicDetours = new ArrayList(sizeof(DynamicDetourData));
@@ -283,12 +286,13 @@ stock void PSM_Init(const char[] convarName, GameData gamedata = null)
 stock void PSM_TogglePluginState()
 {
 	ThrowIfNotInitialized();
-	
 	InitializeStateConVar();
-	
-	if (PSM_IsEnabled() != s_stateConVar.BoolValue)
+
+	bool shouldEnable = s_stateConVar.BoolValue && PSM_ShouldEnable();
+
+	if (PSM_IsEnabled() != shouldEnable)
 	{
-		PSM_SetPluginState(s_stateConVar.BoolValue);
+		PSM_SetPluginState(shouldEnable);
 	}
 }
 
@@ -451,15 +455,29 @@ stock void PSM_SetPluginState(bool enable)
 /**
  * Registers a callback function that is called when the state of the plugin changes.
  *
- * @param func		A PluginStateChangedCallback function pointer.
+ * @param callback	A PluginStateChangedCallback function pointer.
  * @return			True on success, false otherwise.
  * @error			Plugin state manager not initialized.
  */
-stock bool PSM_AddPluginStateChangedHook(PluginStateChangedCallback func)
+stock bool PSM_AddPluginStateChangedHook(PluginStateChangedCallback callback)
 {
 	ThrowIfNotInitialized();
 	
-	return s_stateChangedFwd.AddFunction(null, func);
+	return s_stateChangedFwd.AddFunction(null, callback);
+}
+
+/**
+ * Registers a callback function to determine whether `PSM_TogglePluginState` should enable the plugin.
+ *
+ * @param callback	A ShouldEnableCallback function pointer.
+ * @return			True on success, false otherwise.
+ * @error			Plugin state manager not initialized.
+ */
+stock bool PSM_AddShouldEnableCallback(ShouldEnableCallback callback)
+{
+	ThrowIfNotInitialized();
+
+	return s_shouldEnableFwd.AddFunction(null, callback);
 }
 
 /**
@@ -1171,6 +1189,20 @@ static void OnDynamicHookRemoved(int hookid)
 	int index = s_dynamicHookIds.FindValue(hookid, DHookIdData::hookid);
 	if (index != -1)
 		s_dynamicHookIds.Erase(index);
+}
+
+static bool PSM_ShouldEnable()
+{
+	if (s_shouldEnableFwd.FunctionCount > 0)
+	{
+		bool value = true;
+
+		Call_StartForward(s_shouldEnableFwd);
+		if (Call_Finish(value) != SP_ERROR_NONE || !value)
+			return false;
+	}
+
+	return true;
 }
 
 static int EntIndexToEntRefSafe(int entity)
