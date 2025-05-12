@@ -1,3 +1,8 @@
+#if defined _psm_included
+	#endinput
+#endif
+#define _psm_included
+
 #pragma semicolon 1
 #pragma newdecls required
 
@@ -5,7 +10,7 @@
 #include <sdkhooks>
 #tryinclude <sourcescramble>
 
-#define PSM_VERSION	1.2.0
+#define PSM_VERSION	1.2.1
 
 typedef PluginStateChangedCallback = function void(bool enabled);
 typedef ShouldEnableCallback = function bool();
