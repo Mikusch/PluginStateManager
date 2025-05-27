@@ -2,8 +2,10 @@
 
 ### An include for SourceMod plugins that aims to reduce boilerplate code for enabling and disabling.
 
+## [Download include](/addons/sourcemod/scripting/include/pluginstatemanager.inc)
+
 > [!WARNING]  
-> This was primarily made for my own personal use. It may not be suitable for all plugins, and may change at any moment.
+> This was made primarily for personal use. It may not be suitable for all plugins, and may change at any moment.
 
 This kind of code is quite common:
 
@@ -17,9 +19,9 @@ void OnGameEvent_player_spawn(Event event, const char[] name, bool dontBroadcast
 }
 ```
 
-I grew tired of putting "is enabled" guard clauses at the top of every function, so I wrote a pretty robust system that will automatically unhook and clean up everything if the plugin gets disabled.
+I grew tired of putting "is enabled" guard clauses at the top of every function, so I wrote a robust system that will automatically unhook and clean up everything if the plugin gets disabled.
 
-To avoid copy-pasting it into every plugin I write, I turned it into an include.
+To avoid copy-pasting my solution into every plugin I wrote, I turned it into an include.
 
 ## Usage
 
