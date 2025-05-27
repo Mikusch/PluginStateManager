@@ -2,7 +2,7 @@
 
 ### An include for SourceMod plugins that aims to reduce boilerplate code for enabling and disabling.
 
-## [Download include](/addons/sourcemod/scripting/include/pluginstatemanager.inc)
+#### [➔ Download include](/addons/sourcemod/scripting/include/pluginstatemanager.inc)
 
 > [!WARNING]  
 > This was made primarily for personal use. It may not be suitable for all plugins, and may change at any moment.
