@@ -243,16 +243,16 @@ static ArrayList s_memoryPatches; // ArrayList<MemoryPatchData>
  *
  * This function should be called in the 'OnPluginStart' forward.
  *
- * @param convarName		The name of the convar used to determine whether the plugin should be enabled.
+ * @param conVarName		The name of the convar used to determine whether the plugin should be enabled.
  * 							If the calling plugin does not create this convar, one will be automatically created.
  * @param gamedata			Optional gamedata handle.
  */
-stock void PSM_Init(const char[] convarName, GameData gamedata = null)
+stock void PSM_Init(const char[] conVarName, GameData gamedata = null)
 {
 	if (s_isInitialized)
 		return;
 	
-	strcopy(s_conVarName, sizeof(s_conVarName), convarName);
+	strcopy(s_conVarName, sizeof(s_conVarName), conVarName);
 	
 	if (gamedata)
 		s_gamedata = view_as<GameData>(CloneHandle(gamedata));
@@ -472,7 +472,7 @@ stock bool PSM_AddPluginStateChangedHook(PluginStateChangedCallback callback)
 }
 
 /**
- * Registers a callback function to determine whether `PSM_TogglePluginState` should enable the plugin.
+ * Registers a callback function to determine whether 'PSM_TogglePluginState' should enable the plugin.
  *
  * @param callback	A ShouldEnableCallback function pointer.
  * @return			True on success, false otherwise.
@@ -851,6 +851,8 @@ stock int PSM_DHookGameRules(DynamicHook hook, HookMode mode, DHookCallback call
 
 /**
  * Hooks an entity.
+ *
+ * This should always be paired with a 'PSM_SDKUnhook' call in the 'OnEntityDestroyed' forward to avoid leaking resources.
  *
  * This function does nothing if the plugin is not currently enabled.
  *
