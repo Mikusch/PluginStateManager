@@ -10,7 +10,7 @@
 #include <sdkhooks>
 #tryinclude <sourcescramble>
 
-#define PSM_VERSION	1.2.1
+#define PSM_VERSION	1.2.2
 
 typedef PluginStateChangedCallback = function void(bool enabled);
 typedef ShouldEnableCallback = function bool();
@@ -312,6 +312,7 @@ stock void PSM_TogglePluginState()
 stock void PSM_SetPluginState(bool enable)
 {
 	ThrowIfNotInitialized();
+	InitializeStateConVar();
 	
 	if (PSM_IsEnabled() == enable)
 		return;
@@ -564,7 +565,7 @@ stock void PSM_RemoveEventHook(const char[] name, EventHook callback, EventHookM
 {
 	ThrowIfNotInitialized();
 	
-	for (int i = 0; i < s_events.Length; i++)
+	for (int i = s_events.Length - 1; i >= 0; i--)
 	{
 		EventData data;
 		if (s_events.GetArray(i, data) && StrEqual(name, data.name) && callback == data.callback && mode == data.mode)
