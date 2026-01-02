@@ -10,7 +10,9 @@
 #include <sdkhooks>
 #tryinclude <sourcescramble>
 
-#define PSM_VERSION	1.2.2
+#define PSM_VERSION	1.2.3
+
+#define PSM_ENABLE_CLEANUP
 
 typedef PluginStateChangedCallback = function void(bool enabled);
 typedef ShouldEnableCallback = function bool();
@@ -277,7 +279,11 @@ stock void PSM_Init(const char[] conVarName, GameData gamedata = null)
 #if defined __sourcescramble_ext_included
 	s_memoryPatches = new ArrayList(sizeof(MemoryPatchData));
 #endif
-	
+
+#if defined PSM_ENABLE_CLEANUP
+	CreateTimer(30.0, Timer_PSMCleanup, _, TIMER_REPEAT);
+#endif
+
 	s_isInitialized = true;
 }
 
@@ -1198,6 +1204,24 @@ static void OnDynamicHookRemoved(int hookid)
 	if (index != -1)
 		s_dynamicHookIds.Erase(index);
 }
+
+#if defined PSM_ENABLE_CLEANUP
+static void Timer_PSMCleanup(Handle timer)
+{
+	// Periodically erase invalid entries to avoid memory leaks
+	for (int i = s_sdkHooks.Length - 1; i >= 0; i--)
+	{
+		SDKHookData data;
+		if (s_sdkHooks.GetArray(i, data))
+		{
+			if (EntRefToEntIndex(data.ref) == -1)
+			{
+				s_sdkHooks.Erase(i);
+			}
+		}
+	}
+}
+#endif
 
 static bool PSM_ShouldEnable()
 {
