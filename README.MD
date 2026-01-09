@@ -64,4 +64,5 @@ For more detailed examples, check out some of my plugins utilizing the include:
 
 * [Mann in the Machine](https://github.com/Mikusch/MannInTheMachine)
 * [Deathrun Neu](https://github.com/Mikusch/deathrun)
+* [Mann vs. Mann](https://github.com/Mikusch/MannVsMann)
 * [Fixed Friendly Fire](https://github.com/Mikusch/friendlyfire)
