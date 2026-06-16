@@ -10,7 +10,7 @@
 #include <sdkhooks>
 #tryinclude <sourcescramble>
 
-#define PSM_VERSION	1.2.3
+#define PSM_VERSION	1.3.0
 
 #define PSM_ENABLE_CLEANUP
 
@@ -216,7 +216,7 @@ static char s_conVarName[64];
 static ConVar s_stateConVar;
 static GameData s_gamedata;
 static PrivateForward s_stateChangedFwd;
-static PrivateForward s_shouldEnableFwd;
+static ArrayList s_shouldEnableCallbacks; // ArrayList<Function>
 
 static ArrayList s_events; // ArrayList<EventData>
 static ArrayList s_dynamicDetours; // ArrayList <DynamicDetourData>
@@ -260,7 +260,7 @@ stock void PSM_Init(const char[] conVarName, GameData gamedata = null)
 		s_gamedata = view_as<GameData>(CloneHandle(gamedata));
 	
 	s_stateChangedFwd = new PrivateForward(ET_Ignore, Param_Cell);
-	s_shouldEnableFwd = new PrivateForward(ET_Single);
+	s_shouldEnableCallbacks = new ArrayList();
 	
 	s_events = new ArrayList(sizeof(EventData));
 	s_dynamicDetours = new ArrayList(sizeof(DynamicDetourData));
@@ -355,10 +355,13 @@ stock void PSM_SetPluginState(bool enable)
 		}
 		
 		// SDKHooks
-		int entity = -1;
-		while ((entity = FindEntityByClassname(entity, "*")) != -1)
+		for (int i = s_sdkHooks.Length - 1; i >= 0; i--)
 		{
-			PSM_SDKUnhook(entity);
+			SDKHookData data;
+			if (s_sdkHooks.GetArray(i, data) && EntRefToEntIndex(data.ref) != -1)
+				SDKUnhook(data.ref, data.type, data.callback);
+
+			s_sdkHooks.Erase(i);
 		}
 	}
 	
@@ -489,7 +492,11 @@ stock bool PSM_AddShouldEnableCallback(ShouldEnableCallback callback)
 {
 	ThrowIfNotInitialized();
 
-	return s_shouldEnableFwd.AddFunction(null, callback);
+	if (s_shouldEnableCallbacks.FindValue(callback) != -1)
+		return false;
+
+	s_shouldEnableCallbacks.Push(callback);
+	return true;
 }
 
 /**
@@ -1225,11 +1232,13 @@ static void Timer_PSMCleanup(Handle timer)
 
 static bool PSM_ShouldEnable()
 {
-	if (s_shouldEnableFwd.FunctionCount > 0)
+	for (int i = 0; i < s_shouldEnableCallbacks.Length; i++)
 	{
-		bool value = true;
+		Function callback = s_shouldEnableCallbacks.Get(i);
 
-		Call_StartForward(s_shouldEnableFwd);
+		Call_StartFunction(null, callback);
+
+		bool value = true;
 		if (Call_Finish(value) != SP_ERROR_NONE || !value)
 			return false;
 	}
@@ -1239,7 +1248,7 @@ static bool PSM_ShouldEnable()
 
 static int EntIndexToEntRefSafe(int entity)
 {
-	return IsValidEdict(entity) ? EntIndexToEntRef(entity) : entity;
+	return IsValidEntity(entity) ? EntIndexToEntRef(entity) : entity;
 }
 
 static void ToggleEnforcedConVar(int index, bool enable)
@@ -1348,16 +1357,18 @@ static void OnSyncedConVarChanged(ConVar convar, const char[] oldValue, const ch
 
 static void OnSourceConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
-	int index = s_syncedConVars.FindValue(convar, SyncedConVarData::sourceConVar);
-	if (index == -1)
-		return;
-
-	SyncedConVarData data;
-	if (s_syncedConVars.GetArray(index, data))
+	for (int i = 0; i < s_syncedConVars.Length; i++)
 	{
+		if (s_syncedConVars.Get(i, SyncedConVarData::sourceConVar) != convar)
+			continue;
+
+		SyncedConVarData data;
+		if (!s_syncedConVars.GetArray(i, data))
+			continue;
+
 		ConVar target = FindConVar(data.name);
 		if (!target)
-			return;
+			continue;
 
 		target.RemoveChangeHook(OnSyncedConVarChanged);
 		target.SetString(newValue);
