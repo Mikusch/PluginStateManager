@@ -10,7 +10,7 @@
 #include <sdkhooks>
 #tryinclude <sourcescramble>
 
-#define PSM_VERSION	1.3.1
+#define PSM_VERSION	1.4.0
 
 #define PSM_ENABLE_CLEANUP
 
