@@ -611,8 +611,11 @@ stock DynamicDetour PSM_AddDynamicDetourFromConf(const char[] name, DHookCallbac
 	DynamicDetour detour = DynamicDetour.FromConf(s_gamedata, name);
 	if (detour)
 	{
-		PSM_AddDynamicDetour(name, detour, callbackPre, callbackPost);
-		return detour;
+		DynamicDetour registered = PSM_AddDynamicDetour(name, detour, callbackPre, callbackPost);
+		if (registered != detour)
+			delete detour;
+
+		return registered;
 	}
 	else
 	{
@@ -628,17 +631,19 @@ stock DynamicDetour PSM_AddDynamicDetourFromConf(const char[] name, DHookCallbac
  * @param detour			The DynamicDetour object.
  * @param callbackPre		Optional pre callback function.
  * @param callbackPost		Optional post callback function.
+ * @return					The registered DynamicDetour.
+ * 							If an identical detour was already registered, the existing one is returned.
  * @error					Plugin state manager or GameData handle not initialized.
  */
-stock void PSM_AddDynamicDetour(const char[] name, DynamicDetour detour, DHookCallback callbackPre = INVALID_FUNCTION, DHookCallback callbackPost = INVALID_FUNCTION)
+stock DynamicDetour PSM_AddDynamicDetour(const char[] name, DynamicDetour detour, DHookCallback callbackPre = INVALID_FUNCTION, DHookCallback callbackPost = INVALID_FUNCTION)
 {
 	ThrowIfNotInitialized();
-	
+
 	for (int i = 0; i < s_dynamicDetours.Length; i++)
 	{
 		DynamicDetourData existing;
 		if (s_dynamicDetours.GetArray(i, existing) && StrEqual(existing.name, name) && existing.callbackPre == callbackPre && existing.callbackPost == callbackPost)
-			return;
+			return existing.detour;
 	}
 
 	DynamicDetourData data;
@@ -646,11 +651,13 @@ stock void PSM_AddDynamicDetour(const char[] name, DynamicDetour detour, DHookCa
 	data.detour = detour;
 	data.callbackPre = callbackPre;
 	data.callbackPost = callbackPost;
-	
+
 	s_dynamicDetours.PushArray(data);
-	
+
 	if (PSM_IsEnabled())
 		data.Toggle(true);
+
+	return detour;
 }
 
 /**
