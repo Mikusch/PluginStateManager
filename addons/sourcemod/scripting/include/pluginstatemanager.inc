@@ -1248,7 +1248,7 @@ static bool PSM_ShouldEnable()
 
 static int EntIndexToEntRefSafe(int entity)
 {
-	return IsValidEntity(entity) ? EntIndexToEntRef(entity) : entity;
+	return (entity >= 0 && IsValidEntity(entity)) ? EntIndexToEntRef(entity) : entity;
 }
 
 static void ToggleEnforcedConVar(int index, bool enable)
