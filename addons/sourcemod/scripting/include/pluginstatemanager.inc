@@ -10,7 +10,7 @@
 #include <sdkhooks>
 #tryinclude <sourcescramble>
 
-#define PSM_VERSION	1.3.0
+#define PSM_VERSION	1.3.1
 
 #define PSM_ENABLE_CLEANUP
 
@@ -90,6 +90,7 @@ enum struct SyncedConVarData
 	char name[64];
 	char initialValue[64];
 	ConVar sourceConVar;
+	bool active;
 }
 
 enum struct ConVarChangeHookData
@@ -633,6 +634,13 @@ stock void PSM_AddDynamicDetour(const char[] name, DynamicDetour detour, DHookCa
 {
 	ThrowIfNotInitialized();
 	
+	for (int i = 0; i < s_dynamicDetours.Length; i++)
+	{
+		DynamicDetourData existing;
+		if (s_dynamicDetours.GetArray(i, existing) && StrEqual(existing.name, name) && existing.callbackPre == callbackPre && existing.callbackPost == callbackPost)
+			return;
+	}
+
 	DynamicDetourData data;
 	strcopy(data.name, sizeof(data.name), name);
 	data.detour = detour;
@@ -790,12 +798,12 @@ stock int PSM_DHookEntity(DynamicHook hook, HookMode mode, int entity, DHookCall
 		return INVALID_HOOK_ID;
 	
 	int hookid = hook.HookEntity(mode, entity, callback, OnDynamicHookRemoved);
-	if (hookid != INVALID_HOOK_ID)
+	if (hookid != INVALID_HOOK_ID && s_dynamicHookIds.FindValue(hookid, DHookIdData::hookid) == -1)
 	{
 		DHookIdData data;
 		data.hookid = hookid;
 		data.hook = hook;
-		
+
 		s_dynamicHookIds.PushArray(data);
 	}
 	
@@ -847,12 +855,12 @@ stock int PSM_DHookGameRules(DynamicHook hook, HookMode mode, DHookCallback call
 		return INVALID_HOOK_ID;
 	
 	int hookid = hook.HookGamerules(mode, callback, OnDynamicHookRemoved);
-	if (hookid != INVALID_HOOK_ID)
+	if (hookid != INVALID_HOOK_ID && s_dynamicHookIds.FindValue(hookid, DHookIdData::hookid) == -1)
 	{
 		DHookIdData data;
 		data.hookid = hookid;
 		data.hook = hook;
-		
+
 		s_dynamicHookIds.PushArray(data);
 	}
 	
@@ -1168,6 +1176,7 @@ stock MemoryPatch PSM_AddMemoryPatchFromConf(const char[] name)
 	}
 	else
 	{
+		delete patch;
 		ThrowError("Failed to validate memory patch '%s'", name);
 		return null;
 	}
@@ -1282,12 +1291,12 @@ static void ToggleSyncedConVar(int index, bool enable)
 	if (!s_syncedConVars.GetArray(index, data))
 		return;
 
-	ConVar target = FindConVar(data.name);
-	if (!target)
-		return;
-
 	if (enable)
 	{
+		ConVar target = FindConVar(data.name);
+		if (!target)
+			return;
+
 		target.GetString(data.initialValue, sizeof(data.initialValue));
 
 		char value[64];
@@ -1295,16 +1304,28 @@ static void ToggleSyncedConVar(int index, bool enable)
 		target.SetString(value);
 
 		data.sourceConVar.AddChangeHook(OnSourceConVarChanged);
+
+		data.active = true;
 		s_syncedConVars.SetArray(index, data);
 
 		target.AddChangeHook(OnSyncedConVarChanged);
 	}
 	else
 	{
-		target.RemoveChangeHook(OnSyncedConVarChanged);
-		target.SetString(data.initialValue);
+		if (!data.active)
+			return;
+
+		data.active = false;
+		s_syncedConVars.SetArray(index, data);
 
 		data.sourceConVar.RemoveChangeHook(OnSourceConVarChanged);
+
+		ConVar target = FindConVar(data.name);
+		if (target)
+		{
+			target.RemoveChangeHook(OnSyncedConVarChanged);
+			target.SetString(data.initialValue);
+		}
 	}
 }
 
