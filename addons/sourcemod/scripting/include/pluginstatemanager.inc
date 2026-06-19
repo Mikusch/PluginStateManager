@@ -65,6 +65,12 @@ enum struct DynamicHookData
 	DynamicHook hook;
 }
 
+enum struct DHookIdData
+{
+	int hookid;
+	DynamicHook hook;
+}
+
 enum struct SDKHookData
 {
 	int ref;
@@ -216,7 +222,7 @@ static ArrayList s_shouldEnableCallbacks; // ArrayList<Function>
 static ArrayList s_events; // ArrayList<EventData>
 static ArrayList s_dynamicDetours; // ArrayList <DynamicDetourData>
 static ArrayList s_dynamicHooks; // ArrayList<DynamicHookData>
-static IntMap s_dynamicHookIds; // IntMap<hookid, DynamicHook>
+static ArrayList s_dynamicHookIds; // ArrayList<DHookIdData>
 static ArrayList s_sdkHooks; // ArrayList<SDKHookData>
 static ArrayList s_enforcedConVars; // ArrayList<EnforcedConVarData>
 static ArrayList s_syncedConVars;   // ArrayList<SyncedConVarData>
@@ -260,7 +266,7 @@ stock void PSM_Init(const char[] conVarName, GameData gamedata = null)
 	s_events = new ArrayList(sizeof(EventData));
 	s_dynamicDetours = new ArrayList(sizeof(DynamicDetourData));
 	s_dynamicHooks = new ArrayList(sizeof(DynamicHookData));
-	s_dynamicHookIds = new IntMap();
+	s_dynamicHookIds = new ArrayList(sizeof(DHookIdData));
 	s_sdkHooks = new ArrayList(sizeof(SDKHookData));
 	s_enforcedConVars = new ArrayList(sizeof(EnforcedConVarData));
 	s_syncedConVars = new ArrayList(sizeof(SyncedConVarData));
@@ -343,12 +349,11 @@ stock void PSM_SetPluginState(bool enable)
 	if (!enable)
 	{
 		// Dynamic hooks
-		IntMapSnapshot snapshot = s_dynamicHookIds.Snapshot();
-		for (int i = 0; i < snapshot.Length; i++)
+		for (int i = s_dynamicHookIds.Length - 1; i >= 0; i--)
 		{
-			DynamicHook.RemoveHook(snapshot.GetKey(i));
+			int hookid = s_dynamicHookIds.Get(i, DHookIdData::hookid);
+			DynamicHook.RemoveHook(hookid);
 		}
-		delete snapshot;
 		
 		// SDKHooks
 		for (int i = s_sdkHooks.Length - 1; i >= 0; i--)
@@ -597,8 +602,6 @@ stock void PSM_RemoveEventHook(const char[] name, EventHook callback, EventHookM
  * @param name				Name of the function in a "Functions" section to load.
  * @param callbackPre		Optional pre callback function.
  * @param callbackPost		Optional post callback function.
- * @return					The registered DynamicDetour.
- * 							If an identical detour was already registered, the existing one is returned.
  * @error					Invalid gamedata, plugin state manager not initialized or GameData handle not initialized.
  */
 stock DynamicDetour PSM_AddDynamicDetourFromConf(const char[] name, DHookCallback callbackPre = INVALID_FUNCTION, DHookCallback callbackPost = INVALID_FUNCTION)
@@ -744,16 +747,11 @@ stock void PSM_RemoveDynamicHook(const char[] name)
 		if (s_dynamicHooks.GetArray(i, data) && StrEqual(name, data.name))
 		{
 			// Unhook any entities that belong to this hook
-			IntMapSnapshot snapshot = s_dynamicHookIds.Snapshot();
-			for (int j = 0; j < snapshot.Length; j++)
+			for (int j = s_dynamicHookIds.Length - 1; j >= 0; j--)
 			{
-				int hookid = snapshot.GetKey(j);
-
-				DynamicHook hook;
-				if (s_dynamicHookIds.GetValue(hookid, hook) && hook == data.hook)
-					DynamicHook.RemoveHook(hookid);
+				if (s_dynamicHookIds.Get(j, DHookIdData::hook) == data.hook)
+					DynamicHook.RemoveHook(s_dynamicHookIds.Get(j, DHookIdData::hookid));
 			}
-			delete snapshot;
 			
 			s_dynamicHooks.Erase(i);
 		}
@@ -807,8 +805,14 @@ stock int PSM_DHookEntity(DynamicHook hook, HookMode mode, int entity, DHookCall
 		return INVALID_HOOK_ID;
 	
 	int hookid = hook.HookEntity(mode, entity, callback, OnDynamicHookRemoved);
-	if (hookid != INVALID_HOOK_ID)
-		s_dynamicHookIds.SetValue(hookid, hook);
+	if (hookid != INVALID_HOOK_ID && s_dynamicHookIds.FindValue(hookid, DHookIdData::hookid) == -1)
+	{
+		DHookIdData data;
+		data.hookid = hookid;
+		data.hook = hook;
+
+		s_dynamicHookIds.PushArray(data);
+	}
 	
 	return hookid;
 }
@@ -858,8 +862,14 @@ stock int PSM_DHookGameRules(DynamicHook hook, HookMode mode, DHookCallback call
 		return INVALID_HOOK_ID;
 	
 	int hookid = hook.HookGamerules(mode, callback, OnDynamicHookRemoved);
-	if (hookid != INVALID_HOOK_ID)
-		s_dynamicHookIds.SetValue(hookid, hook);
+	if (hookid != INVALID_HOOK_ID && s_dynamicHookIds.FindValue(hookid, DHookIdData::hookid) == -1)
+	{
+		DHookIdData data;
+		data.hookid = hookid;
+		data.hook = hook;
+
+		s_dynamicHookIds.PushArray(data);
+	}
 	
 	return hookid;
 }
@@ -1213,7 +1223,9 @@ static void OnEnableConVarChanged(ConVar convar, const char[] oldValue, const ch
 
 static void OnDynamicHookRemoved(int hookid)
 {
-	s_dynamicHookIds.Remove(hookid);
+	int index = s_dynamicHookIds.FindValue(hookid, DHookIdData::hookid);
+	if (index != -1)
+		s_dynamicHookIds.Erase(index);
 }
 
 #if defined PSM_ENABLE_CLEANUP
