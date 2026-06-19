@@ -602,6 +602,8 @@ stock void PSM_RemoveEventHook(const char[] name, EventHook callback, EventHookM
  * @param name				Name of the function in a "Functions" section to load.
  * @param callbackPre		Optional pre callback function.
  * @param callbackPost		Optional post callback function.
+ * @return					The registered DynamicDetour.
+ * 							If an identical detour was already registered, the existing one is returned.
  * @error					Invalid gamedata, plugin state manager not initialized or GameData handle not initialized.
  */
 stock DynamicDetour PSM_AddDynamicDetourFromConf(const char[] name, DHookCallback callbackPre = INVALID_FUNCTION, DHookCallback callbackPost = INVALID_FUNCTION)
