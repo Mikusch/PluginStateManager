@@ -1280,6 +1280,21 @@ static void ToggleEnforcedConVar(int index, bool enable)
 	}
 }
 
+static bool IsSourceConVarInUse(ConVar source, int exceptIndex)
+{
+	for (int i = 0; i < s_syncedConVars.Length; i++)
+	{
+		if (i == exceptIndex)
+			continue;
+
+		SyncedConVarData data;
+		if (s_syncedConVars.GetArray(i, data) && data.active && data.sourceConVar == source)
+			return true;
+	}
+
+	return false;
+}
+
 static void ToggleSyncedConVar(int index, bool enable)
 {
 	SyncedConVarData data;
@@ -1298,7 +1313,9 @@ static void ToggleSyncedConVar(int index, bool enable)
 		data.sourceConVar.GetString(value, sizeof(value));
 		target.SetString(value);
 
-		data.sourceConVar.AddChangeHook(OnSourceConVarChanged);
+		// Only hook the source convar once, even if multiple synced convars share it
+		if (!IsSourceConVarInUse(data.sourceConVar, index))
+			data.sourceConVar.AddChangeHook(OnSourceConVarChanged);
 
 		data.active = true;
 		s_syncedConVars.SetArray(index, data);
@@ -1313,7 +1330,9 @@ static void ToggleSyncedConVar(int index, bool enable)
 		data.active = false;
 		s_syncedConVars.SetArray(index, data);
 
-		data.sourceConVar.RemoveChangeHook(OnSourceConVarChanged);
+		// Only unhook the source convar once the last synced convar using it is disabled
+		if (!IsSourceConVarInUse(data.sourceConVar, index))
+			data.sourceConVar.RemoveChangeHook(OnSourceConVarChanged);
 
 		ConVar target = FindConVar(data.name);
 		if (target)
@@ -1379,7 +1398,7 @@ static void OnSourceConVarChanged(ConVar convar, const char[] oldValue, const ch
 			continue;
 
 		SyncedConVarData data;
-		if (!s_syncedConVars.GetArray(i, data))
+		if (!s_syncedConVars.GetArray(i, data) || !data.active)
 			continue;
 
 		ConVar target = FindConVar(data.name);
