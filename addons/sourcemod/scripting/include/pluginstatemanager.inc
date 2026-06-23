@@ -10,7 +10,7 @@
 #include <sdkhooks>
 #tryinclude <sourcescramble>
 
-#define PSM_VERSION	1.4.0
+#define PSM_VERSION	1.4.1
 
 #define PSM_ENABLE_CLEANUP
 
@@ -22,13 +22,27 @@ enum struct EventData
 	char name[32];
 	EventHook callback;
 	EventHookMode mode;
-	
+	bool active;
+
 	void Toggle(bool enable)
 	{
+		if (enable == this.active)
+			return;
+
 		if (enable)
-			HookEvent(this.name, this.callback, this.mode);
+		{
+			if (!HookEventEx(this.name, this.callback, this.mode))
+			{
+				LogError("Failed to hook event '%s'", this.name);
+				return;
+			}
+		}
 		else
+		{
 			UnhookEvent(this.name, this.callback, this.mode);
+		}
+
+		this.active = enable;
 	}
 }
 
@@ -333,6 +347,7 @@ stock void PSM_SetPluginState(bool enable)
 		if (s_events.GetArray(i, data))
 		{
 			data.Toggle(enable);
+			s_events.SetArray(i, data);
 		}
 	}
 	
@@ -555,11 +570,11 @@ stock void PSM_AddEventHook(const char[] name, EventHook callback, EventHookMode
 		strcopy(data.name, sizeof(data.name), name);
 		data.callback = callback;
 		data.mode = mode;
-		
-		s_events.PushArray(data);
-		
+
 		if (PSM_IsEnabled())
 			data.Toggle(true);
+
+		s_events.PushArray(data);
 	}
 	else
 	{
